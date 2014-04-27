@@ -55,8 +55,9 @@ function Game:load()
     for k,v in pairs(DIRS) do
         moved[k] = false
     end
-    jumped = false
-    clicked = false
+    markedSomething = false
+    clearedMarks = false
+    builtSomething = false
 
     setSize(LARGE)
     OUTLINES = true
@@ -73,7 +74,7 @@ function Game:load()
     map = Map:add({}, TILES)
     
     love.mouse.setGrabbed(true)
-    camera = P(0,0)
+    camera = P(0,140)
     Game:update(1/30) --force an update before any draw function is possible.
 end
 
@@ -124,17 +125,6 @@ function Canvas:draw()
     love.graphics.push()
     local p = camera
     love.graphics.translate(width/2-p[1],height/2-p[2])
-
-    for layer = 0, LAST_LAYER do
-        for i = #drawables[layer],1,-1 do
-            local o = drawables[layer][i]
-            o:draw()
-            
-            if o.destroyed then
-                table.remove(drawables[layer],i)
-            end
-        end
-    end
     
     -- draw a light mask to the canvas)
     -- there is light around each unit
@@ -149,20 +139,43 @@ function Canvas:draw()
         local scale = 2*r/w
         love.graphics.draw(softCircle, u.p[1], u.p[2], 0, scale, scale, ox, oy)
     end
-    love.graphics.pop()    
     love.graphics.setCanvas()
-    love.graphics.setColor(255,255,255,255)
-    love.graphics.setBlendMode("multiplicative")
-    love.graphics.draw(buffer, 0, 0)    
-    love.graphics.setBlendMode("alpha")
+
+    for layer = 0, LAST_LAYER do
+        for i = #drawables[layer],1,-1 do
+            local o = drawables[layer][i]
+            o:draw()
+            
+            if o.destroyed then
+                table.remove(drawables[layer],i)
+            end
+        end
+        if layer == SHADOW then
+            -- apply the shadow mask
+            love.graphics.pop()    
+            love.graphics.setColor(255,255,255,255)
+            love.graphics.setBlendMode("multiplicative")
+            love.graphics.draw(buffer, 0, 0)    
+            love.graphics.setBlendMode("alpha")
+            love.graphics.push()
+            love.graphics.translate(width/2-p[1],height/2-p[2])
+        end
+    end
+    love.graphics.pop()    
 end
 
-function Game:mousepress(x,y, button, isrepeat)
+function Canvas:mousepress(x,y, button, isrepeat)
     if button == "r" and not isrepeat then
-        clicked = true
-        markTarget(mouse)
+        clearTargets()
+        return true
     elseif  button == "l" and not isrepeat then
+        local tileType = map:getTile(mouse)
+        if tileType ~= 0 then
+            markTarget(mouse)
+            return true
+        end
     end
+    return false
 end
 
 function Game:mouserelease(x,y, button)

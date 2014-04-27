@@ -169,14 +169,14 @@ function Map:gridCoordinate(p)
 end
 
 function Map:getTile(p)
-    local gx, gy = gridCoordinate(p)
+    local gx, gy = self:gridCoordinate(p)
     return self:gridValue(gx, gy)
 end
 
 -- returns the game coordinates of the centers of all of the tiles in an area
 function Map:getTilesNear(p, r)
     result = {}
-    local gx, gy = gridCoordinate(p)
+    local gx, gy = self:gridCoordinate(p)
     local gr = math.ceil(r/self.unit)
     for x = gx - r, gx + r do
         for y = gy - r, gy + r do
@@ -309,95 +309,3 @@ function Map:collide(object, dt)
     object.p = p2
     object.v = speed2
 end
-
--- returns a vector indicating how far (and in what direction) a box would need to be moved 
--- to not be in a wall
--- this gives the smallest offset to push the object out of some wall, but it may still be in another so this may be repeated for collision logic
-
--- this behaves poorly for tiles smaller than the player (and gaps between groups of tiles smaller than the player)
-function Map:getLeastPen(p1, size)
-    local maxDepth = 2 -- how many tiles a valid offset is likely to be bounded by
-    -- (depends on how fast the object is traveling -> magn9speed) / tile size
-    
-    local x1 = math.floor(p1[1]/self.unit)
-    local y1 = math.floor(p1[2]/self.unit)
-    local x2 = math.ceil((p1[1] + size[1])/self.unit) - 1
-    local y2 = math.ceil((p1[2] + size[2])/self.unit) - 1
-    
-    local penX = math.huge
-    local penY = math.huge
-    
-    local hCollision = 0
-    local vCollision = 0
-    
-    for dir = -1, 1, 2 do
-        local dirPenX = 0
-        local dirPenY = 0
-        
-        -- check rows for horizontal collisions
-        local startX = dir == 1 and x1 or x2
-        local endX = dir == 1 and x2 + maxDepth or x1 - maxDepth
-        for y = y1, y2 do
-            local collision = false
-            local newPenX = 0
-            for x = startX, endX, dir do
-                if (x < x1 or x > x2) and not collision then
-                    break
-                end
-                if DEBUG_COLLISION then self:setTileValue(x, y, 1) end
-                if self:gridValue(x, y) ~= 0 then
-                    collision = true
-                    if dir == 1 then
-                        newPenX = (x + 1) * self.unit - p1[1] + 0.001
-                    else
-                        newPenX = (x) * self.unit - (p1[1] + size[1]) - 0.001
-                    end
-                elseif collision then
-                    break
-                end
-            end
-            
-            if dirPenX == 0 or (newPenX ~= 0 and math.abs(newPenX) < math.abs(dirPenX)) then
-                dirPenX = newPenX
-            end
-        end
-        
-        -- check columns for vertical collisions
-        local startY = dir == 1 and y1 or y2
-        local endY = dir == 1 and y2 + maxDepth or y1 - maxDepth
-        for x = x1, x2 do
-            local collision = false
-            local newPenY = 0
-            for y = startY, endY, dir do
-                if (y < y1 or y > y2) and not collision then
-                    break
-                end
-                if DEBUG_COLLISION then self:setTileValue(x, y, 1) end
-                if self:gridValue(x, y) ~= 0 then
-                    collision = true
-                    if dir == 1 then
-                        newPenY = (y + 1) * self.unit - p1[2]
-                    else
-                        newPenY = (y) * self.unit - (p1[2] + size[2])
-                    end
-                elseif collision then
-                    break
-                end
-            end
-            
-            if dirPenY == 0 or (newPenY ~= 0 and math.abs(newPenY) < math.abs(dirPenY)) then
-                dirPenY = newPenY
-            end
-        end
-
-        if math.abs(dirPenX) < math.abs(penX) then
-            penX = dirPenX
-        end
-        if math.abs(dirPenY) < math.abs(penY) then
-            penY = dirPenY
-        end
-    end
-    
-    return P(penX, penY)
-end
-

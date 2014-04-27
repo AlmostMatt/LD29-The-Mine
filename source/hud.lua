@@ -28,7 +28,7 @@ function consume(resource, qty)
 end
 
 function gameUI()
-    local ui = BoxRel(width,height)
+    local ui = BoxRel(width,height, false)
     local b = BoxV(150,height-40,false)
     b.alignV = ALIGNV.BOTTOM
     ui:add(b,REL.E)
@@ -58,8 +58,8 @@ function gameUI()
     end
     ]]
     local b3 = BoxV(150, height-40, false)
-    buildUnit = BoxV(120,60)
-    buildUnit.onclick = spawnUnit
+    buildUnit = BoxV(120,70)
+    buildUnit.onclick = purchaseUnit
     b3:add(buildUnit)
     ui:add(b3,REL.E)
     
@@ -71,6 +71,24 @@ function gameUI()
         
         Game:addlayer(HUD)
     end
+end
+
+unitCost = {[Map.GOLD]=1, [Map.SILVER]=1}
+
+function purchaseUnit()
+    -- check balance
+    for res, qty in pairs(unitCost) do
+        if (inventory[res] or 0) < qty then
+            print("not enough " .. res)
+            return
+        end
+    end
+    -- descrease balance
+    for res, qty in pairs(unitCost) do
+        inventory[res] = (inventory[res] or 0) - qty
+    end
+    builtSomething = true
+    spawnUnit()
 end
 
 function spawnUnit()
@@ -107,16 +125,16 @@ function HUD:draw()
     local w,h = box.w, box.h
     love.graphics.setColor(0,0,0)
     love.graphics.printf("Build a Unit",x,y+5,w,"center")
-    local cost = {[Map.GOLD]=1, [Map.SILVER]=3}
-    y = y + 36
-    for res, qty in pairs(cost) do
-        drawIcon(res, x + w/2 - 30, y)
-        y = y + 12
+    local i = 0
+    local numIcons = numEntries(unitCost)
+    for res, qty in pairs(unitCost) do
+        drawCost(x + w/2 + (i - (numIcons-1)/2) * 32, y + 40, res, qty)
+        i = i + 1
     end
     
-    local y = 100
-    local w,h = 200,24
-    local x = width - w - 15
+    local y = 200
+    local w,h = 200,44
+    local x = 25 -- width - w - 15
     --[[
     local c = 0
     for k,v in pairs(moved) do
@@ -131,9 +149,17 @@ function HUD:draw()
         y = y + h
     end
     ]]
-    if not clicked then
-        notify("Click on stuff",x, y, w, h)
-        y = y + h
+    if not markedSomething then
+        notify("Click underground to start mining",x, y, w, h)
+        y = y + h + 4
+    elseif not clearedMarks then
+        notify("Units collect resources when they are not busy",x, y, w, h)
+        y = y + h + 4
+        notify("Right click to cancel all instructions",x, y, w, h)
+        y = y + h + 4
+    elseif not builtSomething then
+        notify("If you have enough resources, you can purchase more units",x, y, w, h)
+        y = y + h + 4
     end
 end
 
@@ -145,6 +171,12 @@ function drawIcon(resource, x, y)
     end
     icon.p = P(x - icon.size[1]/2, y - icon.size[2]/2)
     icon:draw()
+end
+
+function drawCost(x, y, resource, qty)
+    local w = 40 -- text width
+    love.graphics.printf(qty,x-w/2,y - 12,w,"center")
+    drawIcon(resource, x, y + 12)
 end
 
 function drawInventoryItem(x, y, w, h, resource, qty)
@@ -161,5 +193,5 @@ function notify(msg, x, y, w, h)
     love.graphics.rectangle("fill",x,y,w,h)
     love.graphics.setColor(0,0,0,196)
     love.graphics.rectangle("line",x,y,w,h)
-    love.graphics.printf(msg,x,y+5,w,"center")
+    love.graphics.printf(msg,x,y+8,w,"center")
 end

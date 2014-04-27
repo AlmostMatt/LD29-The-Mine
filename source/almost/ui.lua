@@ -176,20 +176,25 @@ function drawbox(box,px,py)
 end
 
 function drawui(root)
-    for i,b in ipairs(root.children) do
-        drawbox(b,b.x,b.y)
-    end
+    drawbox(root, 0, 0)
 end
 
+-- return whether or not this box is clickable
 function clickbox(box)
+    local clicked = false
     if box.hover then 
+        if box.visible then
+            print("clicked a box. x" .. box.x .. ", y: " .. box.y .. ", w: " .. box.w .. ", h: " .. box.h)
+            clicked = true
+        end
         if box.onclick then
             box.onclick()
         end
     end
     for i,h in ipairs(box.children) do
-        clickbox(h)
+        clicked = clicked or clickbox(h)
     end
+    return clicked
 end
 
 function hittest(box,mx,my)

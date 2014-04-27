@@ -35,11 +35,10 @@ function love.update(dt)
 end
 
 function love.mousepressed(x,y, button)
-    activestate:mousepress(x,y,button)
-    for i,layer in ipairs(activestate.layers) do
-        if isui(layer) then
-            clickbox(layer.ui)
-        end
+    for i = #activestate.layers, 1, -1 do
+        local layer = activestate.layers[i]
+        local clickHandled = layer:mousepress(x,y,button)
+        if clickHandled then break end
     end
 end
 

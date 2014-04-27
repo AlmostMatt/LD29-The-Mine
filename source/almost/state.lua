@@ -17,10 +17,6 @@ function State:update(dt)
 
 end
 
-function State:mousepress(button,x,y)
-
-end
-
 function State:mouserelease(button,x,y)
 
 end
@@ -55,6 +51,10 @@ function Layer:new(l)
     return l
 end
 
+function Layer:mousepress(button,x,y)
+    return false
+end
+
 function Layer:draw()
 
 end
@@ -64,6 +64,9 @@ function UILayer(root)
     function l:draw()
         hittest(l.ui,love.mouse.getX(),love.mouse.getY())
         drawui(l.ui)
+    end
+    function l:mousepress(x,y, button)
+        return clickbox(l.ui)
     end
     return l
 end

@@ -43,7 +43,9 @@ Target = Entity:new{t=Type.Target, p=P(0,0)}
 function Target:update(dt)
     -- closer idle worker -> change to new worker
     -- closer busy worker + closer than busy worker's task -> change to new worker
-    
+    if self.destroyed then
+        return
+    end
     local newWorker = nil
     local maxD = math.huge
     if self.worker then
@@ -103,9 +105,21 @@ end
 
 function markTarget(point)
     local target = Target:add({p=point}, FOREGROUND)
+    markedSomething = true
     table.insert(targets, target)
 end
 
+function clearTargets()
+    clearedMarks = markedSomething
+    for _, target in ipairs(targets) do
+        if target.worker then
+            target.worker.target = nil
+            target.worker = nil
+        end
+        target.destroyed = true
+    end
+    targets = {}
+end
 
 
 
@@ -138,23 +152,6 @@ function Object:update(dt)
     end
 end
 
---[[
-function Object:collisionCheck(map)
-    local pen = map:getLeastPen(self.p, self.size)
-    if pen[1] ~= 0 or pen[2] ~= 0 then
-        if pen[2] ~= 0 and (pen[1] == 0 or math.abs(pen[1]) > math.abs(pen[2])) then
-            self.p[2] = self.p[2] + pen[2]
-            self.v[2] = 0
-            if pen[2] < 0 then
-                self.onGround = true
-            end
-        else
-            self.p[1] = self.p[1] + pen[1]
-            self.v[1] = 0
-        end
-    end
-end
-]]
 
 function Object:center()
     return Vadd(self.p, Vmult(0.5, self.size))
@@ -289,6 +286,7 @@ function Unit:update(dt)
                 end
             else
                 dir = diff
+                self.actions:use(Action.DIG, dir)
             end
         end
     end
@@ -330,7 +328,10 @@ function Unit:update(dt)
     -- place torches
     --local pos = Vadd(self:center(), P(0, -self.size[2]/2))
     local pos = self:center()
-    local gx, gy = 
+    local gx, gy = map:gridCoordinate(pos)
+    if gy < map.surface[gx] then 
+        pos[2] = pos[2] + (map.surface[gx] - gy) * map.unit
+    end
     local screenPos = ScreenCoordinate(pos) 
     local r = buffer:getPixel(math.floor(screenPos[1]), math.floor(screenPos[2]))
     if r < 64 then

@@ -19,8 +19,8 @@ function ParticleSystem:add(o, layer)
         255,0,0,140,
         0,0,0,160,
         0,0,0,120,
-        0,0,0,64,
-        0,0,0,16,
+        0,0,0,32,
+        0,0,0,0,
         0,0,0,0)
     fire:setSizes(1.4, 1.5, 1.5, 2.0, 2.5, 2.0, 1.7, 1.2)
     fire:setSpread(2 * math.pi)
