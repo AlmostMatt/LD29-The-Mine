@@ -38,8 +38,18 @@ function Container:new (c)
   self.__index = self
   return c
 end
+
+function Container:screenPosition()
+    local px, py = 0, 0
+    if self.parent then
+        px, py = self.parent:screenPosition()
+    end
+    return self.x + px, self.y + py
+end
+
 function Container:add (c, r)
   table.insert(self.children,c)
+  c.parent = self
   if self.layout == LAYOUT.V then
     if self.alignH == ALIGNH.LEFT then
         c.x = self.padH
@@ -145,10 +155,10 @@ end
 function drawbox(box,px,py)
 --    love.graphics.setLineWidth(1)
     if (box.visible) then
-        local a1 = 64
-        local a2 = 200
+        local a1 = 192
+        local a2 = 255
         if box.hover then
-            a1 = 200
+            a1 = 255
             a2 = 255
         end
         love.graphics.setColor(225,225,225,a1)

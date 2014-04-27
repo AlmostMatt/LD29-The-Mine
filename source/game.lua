@@ -1,7 +1,8 @@
 require("almost/entity")
-require("particles")
+require("objects")
 require("particlesystem")
 require("map")
+require("hud")
 
 Game = State:new()
 Canvas = Layer:new()
@@ -29,7 +30,7 @@ WINDOW_SIZES = {
     }
 }
 
-camera = P(0,0)
+softCircle = love.graphics.newImage("assets/circle_soft_edges.png")
 
 SIZE = nil
 function setSize(size)
@@ -39,45 +40,9 @@ function setSize(size)
         love.window.setMode(s.w,s.h)
         width = s.w
         height = s.h
+        buffer = love.graphics.newCanvas(width, height)
+        screenCenter = P(width/2, height/2)
         gameUI()
-    end
-end
-
-function gameUI()
-    local ui = BoxRel(width,height)
-    local b = BoxV(150,height-40,false)
-    b.alignV = ALIGNV.BOTTOM
-    ui:add(b,REL.E)
-    
-    local b2
-    b2 = BoxV(120,30)
-    b2.label = "Toggle Lines"
-    b2.onclick = function() OUTLINES = not OUTLINES end
-    b:add(b2)
-    if SIZE ~= SMALL then
-        b2 = BoxV(120,30)
-        b2.label = "Small"
-        b2.onclick = function() setSize(SMALL) end
-        b:add(b2)
-    end
-    if SIZE ~= MEDIUM then
-        b2 = BoxV(120,30)
-        b2.label = "Medium"
-        b2.onclick = function() setSize(MEDIUM) end
-        b:add(b2)
-    end
-    if SIZE ~= LARGE then
-        b2 = BoxV(120,30)
-        b2.label = "Large"
-        b2.onclick = function() setSize(LARGE) end
-        b:add(b2)
-    end
-    
-    if UI then
-        UI.ui = ui
-    else
-        UI = UILayer(ui)
-        Game:addlayer(UI)
     end
 end
 
@@ -102,13 +67,13 @@ function Game:load()
     frame = 0
     
     InitEntities()
+    InitObjects()
+    
     ps = ParticleSystem:add({}, PARTICLES)
     map = Map:add({}, TILES)
     
-    for n =0,2 do
-        o = Unit:add({p=P(-200 + 140 * n, - 50)}, UNITS)
-    end
-    
+    love.mouse.setGrabbed(true)
+    camera = P(0,0)
     Game:update(1/30) --force an update before any draw function is possible.
 end
 
@@ -116,7 +81,8 @@ function Game:update(dt)
 	dt = math.min(dt,1/30)
     frame = frame + 1
     mx,my = love.mouse.getPosition()
-    mouse = P(mx + camera[1] - width/2, my + camera[2] - height/2)
+    screenMouse = P(mx, my)
+    mouse = GameCoordinate(screenMouse)
         
 	for i = #entities,1,-1 do
 		local o = entities[i]
@@ -127,25 +93,27 @@ function Game:update(dt)
         end
 	end
     
-    -- sample input
-    if love.mouse.isDown("l") then
-        local size = 8
-        map:setTile(mouse, 0)
-        --ps:burn(mouse, size)
-    end
-    if love.mouse.isDown("r") then
-        map:setTile(mouse, map.DIRT)
-        --blood(omouse, 0)
-        --ps:setColors(255,255,255,255,0,128,128,64,0,0,255,0)
-        --ps:emit(1)
-    end
-
-    --player.v = P(0,0)
     for k,dir in pairs(DIRS) do
         if love.keyboard.isDown(KEYS[k]) then
             moved[k] = true
         end
     end
+    
+    local border = 10
+    local camspeed = 400
+    local prox = math.max(border - mx, border - my, mx - (width - border - 1), my - (height - border - 1))
+    if prox > 0 then
+        local dir = unitV(Vsub(screenMouse, screenCenter))
+        camera = Vadd(camera, Vmult(camspeed * dt * prox / border, dir))
+    end
+end
+
+
+function ScreenCoordinate(pos)
+    return Vadd(Vsub(pos, camera), screenCenter)
+end
+function GameCoordinate(pos)
+    return Vsub(Vadd(pos, camera), screenCenter)
 end
 
 function Canvas:draw()
@@ -154,7 +122,6 @@ function Canvas:draw()
     love.graphics.rectangle("fill", 0,0,width,height)
     
     love.graphics.push()
-    camera = P(0,0)
     local p = camera
     love.graphics.translate(width/2-p[1],height/2-p[2])
 
@@ -168,45 +135,33 @@ function Canvas:draw()
             end
         end
     end
-
-    love.graphics.pop()
     
-    -- the following should be generalized and moved to the UI
-    local tl = P (10,10)
-    local br = P(width-10,height-10)
-    local wh = Vsub(br,tl)
-
-    love.graphics.setColor(128,0,0,64)
-    love.graphics.rectangle("line",tl[1],tl[2],wh[1],wh[2])
-
-    love.graphics.setColor(0,0,0)
-    love.graphics.print("Entities: " .. #entities,20,35)
-    love.graphics.print("Drawables: " .. #drawables,20,50)
-
-    --[[
-    local c = 0
-    for k,v in pairs(moved) do
-        if v then c = c + 1 end
+    -- draw a light mask to the canvas)
+    -- there is light around each unit
+    buffer:clear(16, 16, 16, 255)
+    love.graphics.setCanvas(buffer)
+    love.graphics.setColor(255,255,255,128)
+    local w, h = softCircle:getWidth(), softCircle:getHeight()
+    local ox, oy = w/2, h/2
+    local time = love.timer.getTime()
+    for i,u in ipairs(lights) do
+        local r = 150 + 4 * math.sin(math.pi * (time + i))
+        local scale = 2*r/w
+        love.graphics.draw(softCircle, u.p[1], u.p[2], 0, scale, scale, ox, oy)
     end
-    if c < 2 then
-        notify("W A S D to move",y)
-        y = y + h
-    end
-    if not jumped then
-        notify("Space to jump",y)
-        y = y + h
-    end
-    if not clicked then
-        notify("Click on stuff",y)
-        y = y + h
-    end
-    ]]
+    love.graphics.pop()    
+    love.graphics.setCanvas()
+    love.graphics.setColor(255,255,255,255)
+    love.graphics.setBlendMode("multiplicative")
+    love.graphics.draw(buffer, 0, 0)    
+    love.graphics.setBlendMode("alpha")
 end
 
-
-function Game:mousepress(x,y, button)
-    if button == "r" then
-    elseif  button == "l" then
+function Game:mousepress(x,y, button, isrepeat)
+    if button == "r" and not isrepeat then
+        clicked = true
+        markTarget(mouse)
+    elseif  button == "l" and not isrepeat then
     end
 end
 
@@ -220,14 +175,4 @@ end
 
 function Game:keyrelease(key)
 
-end
-
-function notify(msg,y)
-    local w,h = 200,24
-    local x = width - w - 15
-    love.graphics.setColor(255,255,255,128)
-    love.graphics.rectangle("fill",x,y,w,h)
-    love.graphics.setColor(0,0,0,196)
-    love.graphics.rectangle("line",x,y,w,h)
-    love.graphics.printf(msg,x,y+5,w,"center")
 end

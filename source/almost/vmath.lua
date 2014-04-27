@@ -1,4 +1,4 @@
---fix requires (listf)
+require("almost/listf")
 
 --object types: constructors
 TYPES = {

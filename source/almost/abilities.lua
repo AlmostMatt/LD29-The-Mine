@@ -6,12 +6,42 @@ function Class:new(o)
     return o
 end
 
+-- a group of actions for an object
+ActionMap = Class:new{}
+function ActionMap:new(owner)
+    return Class.new(self, {owner=owner, map={}})
+end
+
+function ActionMap:add(actionName, action)
+    action.owner = self.owner
+    self.map[actionName] = action
+end
+
+function ActionMap:use(actionName, ...)
+    return self.map[actionName]:use(...)
+end
+
+function ActionMap:ready(actionName)
+    return self.map[actionName]:ready()
+end
+
+function ActionMap:update(dt)
+    for _, action in pairs(self.map) do
+        action:update(dt)
+    end
+end
+
 -- map action -> input object
 -- map action -> cooldown / max cooldown
 -- set actions
 -- map status -> object with duration, begin, update, end (periodic, persistent, stacking/refreshing, unique)
 
 Action = Class:new{cd=0, maxcd=1}
+Action.JUMP = 0
+Action.THROW = 1
+Action.DIG = 2
+Action.PLACE = 3
+
 
 function Action:ready()
     return self.cd <= 0
@@ -39,7 +69,7 @@ end
 -- for an object/unit that has a group of statuses
 StatusMap = Class:new{}
 function StatusMap:new(owner)
-    map = Class.new(self, {owner=owner, statusMap={}})
+    return Class.new(self, {owner=owner, statusMap={}})
 end
 
 function StatusMap:add(status, duration)

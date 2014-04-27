@@ -2,43 +2,69 @@ require("almost/vmath")
 require("almost/entity")
     
 Type.Map = Type.new()
-Map = Entity:new{t=Type.Map, x1 = -25, x2 = 25, y1 = 0, y2 = 25, unit = 12}
+Map = Entity:new{t=Type.Map, x1 = -50, x2 = 50, y1 = -10, y2 = 75, unit = 12}
+-- underground tiles
+-- must be indexed from 1 to n
 Map.DIRT = 1
 Map.ROCK = 2
 Map.SILVER = 3
 Map.GOLD = 4
+Map.frequency = {60, 20, 4, 1}
+-- non random / surface tiles
+Map.GRASS = 5
+Map.PLATFORM = 6
 
-Map.frequency = {13, 6, 2, 1}
 Map.colors = {
     [Map.DIRT] = {104, 58, 31},
     [Map.ROCK] = {63, 63, 63},
     [Map.SILVER] = {216, 216, 216},
-    [Map.GOLD] = {255, 241, 96}
+    [Map.GOLD] = {255, 241, 96},
+    [Map.GRASS] = {0, 216, 92},
+    [Map.PLATFORM] = {216, 216, 216}
 }
+BKGColor = {54, 37, 27}
 
 DEBUG_COLLISION = false
+
+function Map:randomTile(x, depth)
+    if depth < self.surface[x] then
+        return 0
+    elseif depth == self.surface[x] then
+        return Map.GRASS
+    else
+        local total = 0
+        for tile = Map.DIRT, Map.GOLD do
+            total = total + Map.frequency[tile]
+        end
+        local index = math.random(1, total)
+        local total = 0
+        for tile = Map.DIRT, Map.GOLD do
+            total = total + Map.frequency[tile]
+            if total >= index then
+                return tile
+            end
+        end
+    end
+end
 
 function Map:add(o, layer)
     o = o or {}
     o = Entity.add(self, o, layer)
     o.origin = o.origin or P(0,0)
+    o.surface = {}
     o.tiles = {}
+    o.surface[0] = 0
+    local variance = 0.3
+    for x = 1, o.x2 do
+        o.surface[x] = math.floor(0.5 + o.surface[x-1] + (math.random() - 0.5) * (1.0 + variance))
+    end
+    for x = -1, o.x1, -1 do
+        o.surface[x] = math.floor(0.5 + o.surface[x+1] + (math.random() - 0.5) * (1.0 + variance))
+    end
     for x = o.x1, o.x2 do
         o.tiles[x] = {}
         for y = o.y1, o.y2 do
-            local total = 0
-            for tile = Map.DIRT, Map.GOLD do
-                total = total + Map.frequency[tile]
-            end
-            local index = math.random(1, total)
-            local total = 0
-            for tile = Map.DIRT, Map.GOLD do
-                total = total + Map.frequency[tile]
-                if total >= index then
-                    o.tiles[x][y] = self:newTile(tile)
-                    break
-                end
-            end
+            o.tiles[x][y] = o:newTile(o:randomTile(x, y))
         end
     end
     return o
@@ -47,8 +73,8 @@ end
 function Map:draw()
     for x = self.x1, self.x2 do
         for y = self.y1, self.y2 do
+            local tileType = self:gridValue(x, y)
             if DEBUG_COLLISION then
-                local tileType = self:gridValue(x, y)
                 local color = {0,0,0,255}
                 if tileType == 0 then
                     color[4] = 128
@@ -58,18 +84,22 @@ function Map:draw()
                 love.graphics.setColor(color)
                 love.graphics.rectangle("fill", x * self.unit, y * self.unit, self.unit, self.unit)
             else
-                local tileType = self:gridValue(x, y)
-                if tileType ~= 0 then
-                    local color = self.colors[tileType]
+                if tileType ~= 0 or y >= self.surface[x] then
+                    local color = BKGColor
+                    if tileType ~= 0 then
+                        color = self.colors[tileType]
+                    end
                     love.graphics.setColor(color)
                     love.graphics.rectangle("fill", x * self.unit, y * self.unit, self.unit, self.unit)
+                    if OUTLINES and tileType ~= 0 then
+                        love.graphics.setColor(colormult(0.5, color))
+                        love.graphics.rectangle("line", x * self.unit, y * self.unit, self.unit, self.unit)
+                    end
                 end
             end
         end
     end
-    if OUTLINES then
-        self:drawGrid()
-    end
+    --self:drawGrid()
 end
 
 function Map:drawGrid()
@@ -84,7 +114,8 @@ function Map:drawGrid()
 end
 
 function Map:newTile(value)
-    return {value, 0}
+    --tiletype, debugValue, reachable
+    return {value, 0, false}
 end
 
 function Map:setTile(p, value)
@@ -93,27 +124,29 @@ function Map:setTile(p, value)
     while gx < self.x1 do
         self.x1 = self.x1 - 1
         self.tiles[self.x1] = {}
+        self.surface[self.x1] = self.surface[self.x1 + 1]
         for y = self.y1, self.y2 do
-            self.tiles[self.x1][y] = self:newTile(0)
+            self.tiles[self.x1][y] = self:newTile(self:randomTile(x, y))
         end
     end
     while gx > self.x2 do
         self.x2 = self.x2 + 1
         self.tiles[self.x2] = {}
+        self.surface[self.x2] = self.surface[self.x2 - 1]
         for y = self.y1, self.y2 do
-            self.tiles[self.x2][y] = self:newTile(0)
+            self.tiles[self.x2][y] = self:newTile(self:randomTile(x, y))
         end
     end
     while gy < self.y1 do
         self.y1 = self.y1 - 1
         for x = self.x1, self.x2 do
-            self.tiles[x][self.y1] = self:newTile(0)
+            self.tiles[x][self.y1] = self:newTile(self:randomTile(x, y))
         end
     end
     while gy > self.y2 do
         self.y2 = self.y2 + 1
         for x = self.x1, self.x2 do
-            self.tiles[x][self.y2] = self:newTile(0)
+            self.tiles[x][self.y2] = self:newTile(self:randomTile(x, y))   
         end
     end
     self.tiles[gx][gy][1] = value
@@ -131,10 +164,29 @@ function Map:isWall(p)
     return getTile(p) ~= 0
 end
 
+function Map:gridCoordinate(p)
+    return math.floor(p[1]/self.unit), math.floor(p[2]/self.unit)
+end
+
 function Map:getTile(p)
-    local gx = math.floor(p[1]/self.unit + 0.5)
-    local gy = math.floor(p[2]/self.unit + 0.5)
+    local gx, gy = gridCoordinate(p)
     return self:gridValue(gx, gy)
+end
+
+-- returns the game coordinates of the centers of all of the tiles in an area
+function Map:getTilesNear(p, r)
+    result = {}
+    local gx, gy = gridCoordinate(p)
+    local gr = math.ceil(r/self.unit)
+    for x = gx - r, gx + r do
+        for y = gy - r, gy + r do
+            local tileP = P((x+0.5) * self.unit, (y+0.5) * self.unit)
+            if Vdd(Vsub(tileP, p)) < r^2 then
+                table.insert(result, {p=tileP, val=self:gridValue(x,y)})
+            end
+        end
+    end
+    return result
 end
 
 function Map:gridValue(gx, gy)
@@ -150,12 +202,18 @@ function Map:gridValue(gx, gy)
     end
 end
 
-
-
 -- returns new position and speed
-function Map:collide(p1, size, speed, dt)
-    p2 = Vadd(p1, Vmult(dt, speed))
-    speed2 = P(speed[1], speed[2])
+function Map:collide(object, dt)
+    local p1 = object.p
+    local size = object.size
+    local speed = object.v
+    local elasticity = object.elastic
+    
+    object.onGround = false
+    object.hitWall = false
+    
+    local p2 = Vadd(p1, Vmult(dt, speed))
+    local speed2 = P(speed[1], speed[2])
     
     -- assume that this was called last frame as well
     -- so the object is not currently in a wall.
@@ -177,8 +235,9 @@ function Map:collide(p1, size, speed, dt)
             for x = oldx1, oldx2 do
                 if DEBUG_COLLISION then self:setTileValue(x, y, 1) end
                 if self:gridValue(x, y) ~= 0 then
-                    speed2[2] = 0
+                    speed2[2] = speed[2] * -elasticity
                     if y > oldy2 then
+                        object.onGround = true
                         p2[2] = math.min(p2[2], y * self.unit - size[2])
                     else
                         p2[2] = math.max(p2[2], (y + 1) * self.unit)
@@ -194,7 +253,8 @@ function Map:collide(p1, size, speed, dt)
             for y = oldy1, oldy2 do
                 if DEBUG_COLLISION then self:setTileValue(x, y, 1) end
                 if self:gridValue(x, y) ~= 0 then
-                    speed2[1] = 0
+                    speed2[1] = speed[1] * -elasticity
+                    object.hitWall = true
                     if x > oldx2 then
                         p2[1] = math.min(p2[1], x * self.unit - size[1])
                     else
@@ -235,14 +295,19 @@ function Map:collide(p1, size, speed, dt)
         -- move the unit either horizontally or vertically depending on which requires less displacement
         if math.abs(deltax) < math.abs(deltay) then
             p2[1] = p2[1] + deltax
-            speed2[1] = 0
+            speed2[1] = speed[1] * -elasticity
+            object.hitWall = true
         elseif deltay ~= 0 then
             p2[2] = p2[2] + deltay
-            speed2[2] = 0
+            speed2[2] = speed[1] * -elasticity
+            if deltay < 0 then
+                object.onGround = true
+            end
         end
     end
     
-    return p2, speed2
+    object.p = p2
+    object.v = speed2
 end
 
 -- returns a vector indicating how far (and in what direction) a box would need to be moved 
