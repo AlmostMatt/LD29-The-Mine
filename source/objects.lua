@@ -5,7 +5,7 @@ MOVE_ACCEL = 1300
 MAX_SPEED = 370
 GRAVITY = 700
 TERMINAL_V = 1200
-JUMP_SPEED = -300
+JUMP_SPEED = -370
 FRICTION = 400
 
 
@@ -23,14 +23,16 @@ end
 
 
 
-Torch = Entity:new{}
+Torch = Entity:new{radius = 150, alpha1 = 128, alpha2 = 8, size2 = 2}
 function Torch:add(o)
     local o = Entity.add(self, o, LIGHTS)
     table.insert(lights, o)
     return o
 end
 function Torch:update(dt)
-    ps:burn(self.p, 8)
+    if onScreen(self.p) then
+        ps:burn(self.p, 6)
+    end
 end
 
 
@@ -88,19 +90,31 @@ function Target:update(dt)
 end
 
 function Target:draw(a)
-    if self.worker == nil then
-        love.graphics.setColor(128,0,0,255)
-    else
+    local gx, gy = map:gridCoordinate(self.p)
+    if self.worker then
         love.graphics.setColor(128,128,128,255)
         local p2 = self.worker:center()
-        love.graphics.line(self.p[1], self.p[2], p2[1], p2[2])
-        love.graphics.setColor(0,0,128,255)
+        love.graphics.line((gx + 0.5) * map.unit, (gy + 0.5) * map.unit, p2[1], p2[2])
     end
+    --[[
+    if self.worker == nil then
+        love.graphics.setColor(128,64,64,255)
+    else
+        love.graphics.setColor(64,64,128,255)
+    end
+    ]]
+    --[[
     local r1 = 16
     local r2 = 20
     love.graphics.circle("line", self.p[1], self.p[2], r1)
     love.graphics.line(self.p[1], self.p[2] + r2, self.p[1], self.p[2] - r2)
     love.graphics.line(self.p[1] + r2, self.p[2], self.p[1] - r2, self.p[2])
+    ]]
+
+    love.graphics.setColor(128,0,0, 128)
+    love.graphics.rectangle("fill", gx * map.unit, gy * map.unit, map.unit, map.unit)
+    love.graphics.setColor(192,0,0, 255)
+    love.graphics.rectangle("line", gx * map.unit, gy * map.unit, map.unit, map.unit)
 end
 
 function markTarget(point)
@@ -326,16 +340,18 @@ function Unit:update(dt)
     end    
     
     -- place torches
-    --local pos = Vadd(self:center(), P(0, -self.size[2]/2))
     local pos = self:center()
     local gx, gy = map:gridCoordinate(pos)
-    if gy < map.surface[gx] then 
-        pos[2] = pos[2] + (map.surface[gx] - gy) * map.unit
-    end
-    local screenPos = ScreenCoordinate(pos) 
-    local r = buffer:getPixel(math.floor(screenPos[1]), math.floor(screenPos[2]))
-    if r < 64 then
-        Torch:add{p=pos}
+    if map.surface[gx] and onScreen(pos) then
+        -- don't spawn a torch in the 1st frame, before the map has become infinite
+        if gy < map.surface[gx] then 
+            pos[2] = pos[2] + (map.surface[gx] - gy) * map.unit
+        end
+        local screenPos = ScreenCoordinate(pos) 
+        local r = buffer:getPixel(math.floor(screenPos[1]), math.floor(screenPos[2]))
+        if r < 64 then
+            Torch:add{p=pos}
+        end
     end
 end
 

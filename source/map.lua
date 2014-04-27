@@ -2,17 +2,27 @@ require("almost/vmath")
 require("almost/entity")
     
 Type.Map = Type.new()
-Map = Entity:new{t=Type.Map, x1 = -50, x2 = 50, y1 = -10, y2 = 75, unit = 12}
+Map = Entity:new{t=Type.Map, x1 = 0, x2 = 0, y1 = 0, y2 = 0, unit = 12}
 -- underground tiles
 -- must be indexed from 1 to n
 Map.DIRT = 1
 Map.ROCK = 2
 Map.SILVER = 3
 Map.GOLD = 4
-Map.frequency = {60, 20, 4, 1}
+Map.frequency = {200, 80, 3, 1}
 -- non random / surface tiles
 Map.GRASS = 5
-Map.PLATFORM = 6
+Map.BKG = 6
+Map.PLATFORM = 7
+Map.LAST_TYPE = Map.PLATFORM
+
+-- load tile images
+Map.tileset = love.graphics.newImage( "assets/tiles.png")
+Map.batch = love.graphics.newSpriteBatch(Map.tileset, 7000, "stream")
+Map.quads = {}
+for tile = 1, Map.LAST_TYPE do
+    Map.quads[tile] = love.graphics.newQuad(1 + (tile-1) * (Map.unit + 2), 1, Map.unit, Map.unit, Map.tileset:getWidth(), Map.tileset:getHeight())
+end
 
 Map.colors = {
     [Map.DIRT] = {104, 58, 31},
@@ -54,52 +64,52 @@ function Map:add(o, layer)
     o.surface = {}
     o.tiles = {}
     o.surface[0] = 0
-    local variance = 0.3
-    for x = 1, o.x2 do
-        o.surface[x] = math.floor(0.5 + o.surface[x-1] + (math.random() - 0.5) * (1.0 + variance))
-    end
-    for x = -1, o.x1, -1 do
-        o.surface[x] = math.floor(0.5 + o.surface[x+1] + (math.random() - 0.5) * (1.0 + variance))
-    end
-    for x = o.x1, o.x2 do
-        o.tiles[x] = {}
-        for y = o.y1, o.y2 do
-            o.tiles[x][y] = o:newTile(o:randomTile(x, y))
-        end
-    end
+    o.tiles[0] = {}
+    o.tiles[0][0] = o:newTile(o:randomTile(0, 0))
     return o
 end
 
+function Map:redraw()
+-- TODO
+-- only redraw the map when the camera has moved a full tile's distance, or if a tile was destroyed/created this frame
+end
+
 function Map:draw()
-    for x = self.x1, self.x2 do
-        for y = self.y1, self.y2 do
+    tilecount = 0
+    local x1,y1 = self:gridCoordinate(screenMin)
+    local x2,y2 = self:gridCoordinate(screenMax)
+
+    Map.batch:bind()
+    Map.batch:clear()
+    for x = x1, x2 do
+        for y = y1, y2 do
             local tileType = self:gridValue(x, y)
-            if DEBUG_COLLISION then
-                local color = {0,0,0,255}
+            if tileType ~= 0 or y >= self.surface[x] then
                 if tileType == 0 then
-                    color[4] = 128
+                    tileType = Map.BKG
                 end
-                color[1] = 255 * self.tiles[x][y][2]
-                self.tiles[x][y][2] = math.max(0, self.tiles[x][y][2] - 0.1)
-                love.graphics.setColor(color)
-                love.graphics.rectangle("fill", x * self.unit, y * self.unit, self.unit, self.unit)
-            else
-                if tileType ~= 0 or y >= self.surface[x] then
-                    local color = BKGColor
-                    if tileType ~= 0 then
-                        color = self.colors[tileType]
-                    end
-                    love.graphics.setColor(color)
-                    love.graphics.rectangle("fill", x * self.unit, y * self.unit, self.unit, self.unit)
-                    if OUTLINES and tileType ~= 0 then
-                        love.graphics.setColor(colormult(0.5, color))
-                        love.graphics.rectangle("line", x * self.unit, y * self.unit, self.unit, self.unit)
-                    end
+                local r = 0
+                if tileType ~= Map.GRASS then
+                    math.randomseed(x + y)
+                    r = math.pi * math.random(0,3)/2
                 end
+                Map.batch:add(Map.quads[tileType], (x + 0.5) * self.unit, (y + 0.5) * self.unit, r, 1, 1, self.unit/2, self.unit/2)
+                tilecount = tilecount + 1
             end
         end
+        Map.batch:unbind()
+        love.graphics.setColor(255,255,255,255)
+        love.graphics.draw(Map.batch, 0, 0)
     end
-    --self:drawGrid()
+end
+
+-- this is drawn in front of everything (in front of shadows, anyways)
+function Map:drawOverlay()
+    local mx, my = self:gridCoordinate(mouse)
+    love.graphics.setColor(128,0,0, 128)
+    love.graphics.rectangle("fill", mx * self.unit, my * self.unit, self.unit, self.unit)
+    love.graphics.setColor(192,0,0, 255)
+    love.graphics.rectangle("line", mx * self.unit, my * self.unit, self.unit, self.unit)
 end
 
 function Map:drawGrid()
@@ -113,43 +123,19 @@ function Map:drawGrid()
     end
 end
 
+
+Tile = {val=0, debugVal=0, reachable=false, illuminated=false}
 function Map:newTile(value)
-    --tiletype, debugValue, reachable
-    return {value, 0, false}
+    local o = {val=value}
+    setmetatable(o, Tile)
+    o.__index = Tile
+    return o
 end
 
 function Map:setTile(p, value)
-    local gx = math.floor(p[1]/self.unit)
-    local gy = math.floor(p[2]/self.unit)
-    while gx < self.x1 do
-        self.x1 = self.x1 - 1
-        self.tiles[self.x1] = {}
-        self.surface[self.x1] = self.surface[self.x1 + 1]
-        for y = self.y1, self.y2 do
-            self.tiles[self.x1][y] = self:newTile(self:randomTile(x, y))
-        end
-    end
-    while gx > self.x2 do
-        self.x2 = self.x2 + 1
-        self.tiles[self.x2] = {}
-        self.surface[self.x2] = self.surface[self.x2 - 1]
-        for y = self.y1, self.y2 do
-            self.tiles[self.x2][y] = self:newTile(self:randomTile(x, y))
-        end
-    end
-    while gy < self.y1 do
-        self.y1 = self.y1 - 1
-        for x = self.x1, self.x2 do
-            self.tiles[x][self.y1] = self:newTile(self:randomTile(x, y))
-        end
-    end
-    while gy > self.y2 do
-        self.y2 = self.y2 + 1
-        for x = self.x1, self.x2 do
-            self.tiles[x][self.y2] = self:newTile(self:randomTile(x, y))   
-        end
-    end
-    self.tiles[gx][gy][1] = value
+    local gx, gy = self:gridCoordinate(p)
+    self:extendMap(gx, gy)
+    self.tiles[gx][gy].val = value
 end
 
 function Map:setTileValue(gx, gy, value)
@@ -157,7 +143,7 @@ function Map:setTileValue(gx, gy, value)
         print("New tile at " .. gx .. ", " .. gy)
         self:setTile(P((gx + 0.5) * self.unit, (gy + 0.5) * self.unit))
     end
-    self.tiles[gx][gy][2] = value
+    self.tiles[gx][gy].debugVal = value
 end
 
 function Map:isWall(p)
@@ -190,15 +176,43 @@ function Map:getTilesNear(p, r)
 end
 
 function Map:gridValue(gx, gy)
-    if gx >= self.x1 and gx <= self.x2 and gy >= self.y1 and gy <= self.y2 then
-        tile = self.tiles[gx][gy]
-        if tile[1] == nil then
-            tile[1] = 0
+    if gx < self.x1 or gx > self.x2 or gy < self.y1 or gy > self.y2 then
+        self:extendMap(gx, gy)
+    end
+    tile = self.tiles[gx][gy]
+    return tile.val
+end
+
+-- make the map larger to contain a specified point
+function Map:extendMap(gx, gy)
+    local surfaceVariance = 0.3
+    while gx < self.x1 do
+        self.x1 = self.x1 - 1
+        self.tiles[self.x1] = {}
+        self.surface[self.x1] = math.floor(0.5 + self.surface[self.x1 + 1] + (math.random() - 0.5) * (1.0 + surfaceVariance))
+        for y = self.y1, self.y2 do
+            self.tiles[self.x1][y] = self:newTile(self:randomTile(self.x1, y))
         end
-        --print(gx, gy, #tile)
-        return tile[1]
-    else
-        return 0
+    end
+    while gx > self.x2 do
+        self.x2 = self.x2 + 1
+        self.tiles[self.x2] = {}
+        self.surface[self.x2] = math.floor(0.5 + self.surface[self.x2 - 1] + (math.random() - 0.5) * (1.0 + surfaceVariance))
+        for y = self.y1, self.y2 do
+            self.tiles[self.x2][y] = self:newTile(self:randomTile(self.x2, y))
+        end
+    end
+    while gy < self.y1 do
+        self.y1 = self.y1 - 1
+        for x = self.x1, self.x2 do
+            self.tiles[x][self.y1] = self:newTile(self:randomTile(x, self.y1))
+        end
+    end
+    while gy > self.y2 do
+        self.y2 = self.y2 + 1
+        for x = self.x1, self.x2 do
+            self.tiles[x][self.y2] = self:newTile(self:randomTile(x, self.y2))
+        end
     end
 end
 

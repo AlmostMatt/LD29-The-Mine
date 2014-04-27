@@ -106,7 +106,7 @@ function HUD:draw()
 
     love.graphics.setColor(255, 255, 255)
     love.graphics.print("Entities: " .. #entities,20,35)
-    love.graphics.print("Layers: " .. #drawables,20,50)
+    love.graphics.print("Tiles on screen: " .. tilecount,20,50)
 
     local n = numEntries(inventory)
     local i = 0
@@ -132,7 +132,7 @@ function HUD:draw()
         i = i + 1
     end
     
-    local y = 200
+    local y = height/2 - 22
     local w,h = 200,44
     local x = 25 -- width - w - 15
     --[[
@@ -157,9 +157,15 @@ function HUD:draw()
         y = y + h + 4
         notify("Right click to cancel all instructions",x, y, w, h)
         y = y + h + 4
-    elseif not builtSomething then
-        notify("If you have enough resources, you can purchase more units",x, y, w, h)
-        y = y + h + 4
+    else
+        if not builtSomething then
+            notify("If you have enough resources, you can purchase more units",x, y, w, h)
+            y = y + h + 4
+        end
+        if scrolled < 20 then
+            notify("Move your mouse to the edge fo the screen to scroll",x, y, w, h)
+            y = y + h + 4
+        end
     end
 end
 

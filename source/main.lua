@@ -21,7 +21,7 @@ end
 
 function love.draw()
     activestate:draw()
-    love.graphics.setColor(0,0,0)
+    love.graphics.setColor(255,255,255)
     local fps = "FPS: " .. love.timer.getFPS()
     love.graphics.print(fps,20,20)
 end

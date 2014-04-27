@@ -58,7 +58,8 @@ function Game:load()
     markedSomething = false
     clearedMarks = false
     builtSomething = false
-
+    scrolled = 0
+    
     setSize(LARGE)
     OUTLINES = true
     gameUI()
@@ -105,9 +106,15 @@ function Game:update(dt)
     local prox = math.max(border - mx, border - my, mx - (width - border - 1), my - (height - border - 1))
     if prox > 0 then
         local dir = unitV(Vsub(screenMouse, screenCenter))
+        scrolled = scrolled + camspeed * dt * prox / border
         camera = Vadd(camera, Vmult(camspeed * dt * prox / border, dir))
     end
+    screenMin = GameCoordinate(P(0,0))
+    screenMax = GameCoordinate(P(width,height))
 end
+
+
+
 
 
 function ScreenCoordinate(pos)
@@ -116,6 +123,11 @@ end
 function GameCoordinate(pos)
     return Vsub(Vadd(pos, camera), screenCenter)
 end
+function onScreen(p)
+    return p[1] > screenMin[1] and p[2] > screenMin[2] and p[1] < screenMax[1] and p[2] < screenMax[2]
+end
+
+
 
 function Canvas:draw()
     -- background fill
@@ -128,16 +140,18 @@ function Canvas:draw()
     
     -- draw a light mask to the canvas)
     -- there is light around each unit
-    buffer:clear(16, 16, 16, 255)
+    buffer:clear(0, 0, 0, 255)
     love.graphics.setCanvas(buffer)
-    love.graphics.setColor(255,255,255,128)
     local w, h = softCircle:getWidth(), softCircle:getHeight()
     local ox, oy = w/2, h/2
     local time = love.timer.getTime()
     for i,u in ipairs(lights) do
-        local r = 150 + 4 * math.sin(math.pi * (time + i))
+        local r = Torch.radius + 4 * math.sin(math.pi * (time + i))
         local scale = 2*r/w
+        love.graphics.setColor(255,255,255,Torch.alpha1)
         love.graphics.draw(softCircle, u.p[1], u.p[2], 0, scale, scale, ox, oy)
+        love.graphics.setColor(255,255,255,Torch.alpha2)
+        love.graphics.draw(softCircle, u.p[1], u.p[2], 0, scale * Torch.size2, scale * Torch.size2, ox, oy)
     end
     love.graphics.setCanvas()
 
@@ -159,6 +173,8 @@ function Canvas:draw()
             love.graphics.setBlendMode("alpha")
             love.graphics.push()
             love.graphics.translate(width/2-p[1],height/2-p[2])
+        elseif layer == MAP_OVERLAY then
+            map:drawOverlay()
         end
     end
     love.graphics.pop()    

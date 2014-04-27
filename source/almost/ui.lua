@@ -184,7 +184,6 @@ function clickbox(box)
     local clicked = false
     if box.hover then 
         if box.visible then
-            print("clicked a box. x" .. box.x .. ", y: " .. box.y .. ", w: " .. box.w .. ", h: " .. box.h)
             clicked = true
         end
         if box.onclick then

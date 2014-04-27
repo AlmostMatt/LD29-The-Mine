@@ -11,18 +11,16 @@ function ParticleSystem:add(o, layer)
     fire:setRadialAcceleration(-50)
     fire:setLinearAcceleration(0, - 100)
     fire:setDirection(0)
-    fire:setParticleLifetime(1.0, 2.5)
+    fire:setParticleLifetime(1.0, 1.8)
     fire:setEmitterLifetime(-1) -- -1 is infinite
     fire:setColors(
         255,255,200,200,
         255,255,0,190,
         255,0,0,140,
         0,0,0,160,
-        0,0,0,120,
         0,0,0,32,
-        0,0,0,0,
         0,0,0,0)
-    fire:setSizes(1.4, 1.5, 1.5, 2.0, 2.5, 2.0, 1.7, 1.2)
+    fire:setSizes(1.4, 1.5, 1.5, 2.0, 2.5, 2.0)
     fire:setSpread(2 * math.pi)
     fire:start()
     o.fire = fire
