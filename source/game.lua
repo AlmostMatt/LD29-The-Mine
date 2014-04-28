@@ -43,7 +43,14 @@ function setSize(size)
         love.mouse.setPosition(s.w + dx, s.h + dy)
         width = s.w
         height = s.h
-        buffer = love.graphics.newCanvas(width, height)
+        if love.graphics.isSupported("npot") then
+            buffer = love.graphics.newCanvas(width, height)
+        else
+            -- make the canvas a power of 2
+            local bwidth = 2^math.ceil(math.log(width)/math.log(2))
+            local bheight = 2^math.ceil(math.log(height)/math.log(2))
+            buffer = love.graphics.newCanvas(bwidth, bheight)
+        end
         -- initially white so that the player doesnt spawn a new torch whenever you resize the screen
         buffer:clear(255, 255, 255, 255)
         
