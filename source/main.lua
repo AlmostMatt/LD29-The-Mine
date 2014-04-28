@@ -28,10 +28,10 @@ end
 
 function love.update(dt)
     timediff = timediff + dt
-    while timediff > timestep do
-        timediff = timediff - timestep
-        activestate:update(timestep)
-    end
+    --while timediff > timestep do
+     --   timediff = timediff - timestep
+    activestate:update(dt)
+    --end
 end
 
 function love.mousepressed(x,y, button)

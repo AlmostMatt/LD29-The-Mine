@@ -65,6 +65,7 @@ end
 function Status:expire(owner)
 end
 
+Digging = Status:new{t=1}
 
 -- for an object/unit that has a group of statuses
 StatusMap = Class:new{}
@@ -88,12 +89,16 @@ function StatusMap:has(status)
     return self.statusMap[status.t] ~= nil
 end
 
+function StatusMap:duration(status)
+    return self.statusMap[status.t].dur
+end
+
 function StatusMap:update(dt)
     for statusType, status in pairs(self.statusMap) do
-        status.t = status.t - dt
-        if status.t <= 0 then
+        status.dur = status.dur - dt
+        if status.dur <= 0 then
             status:expire(self.owner)
-            statusMap[statusType] = nil
+            self.statusMap[status.t] = nil
         end
     end
 end

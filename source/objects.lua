@@ -8,6 +8,49 @@ TERMINAL_V = 1200
 JUMP_SPEED = -370
 FRICTION = 400
 
+-- Load assets here
+
+-- image
+UnitImage = love.graphics.newImage("assets/miner.png")
+PickImage = love.graphics.newImage("assets/pick.png")
+TNTImage = love.graphics.newImage("assets/tnt.png")
+-- sound
+--Dig1 = love.audio.newSource("assets/Dig1.wav", "static")
+--Dig2 = love.audio.newSource("assets/Dig2.wav", "static")
+Dig3 = love.audio.newSource("assets/Dig3.wav", "static")
+Dig4 = love.audio.newSource("assets/Dig4.wav", "static")
+--DigSounds = {Dig1, Dig2, Dig3, Dig4}
+DigSounds = {Dig3, Dig4}
+
+JumpSound = love.audio.newSource("assets/Jump.wav", "static")
+ExplosionSound = love.audio.newSource("assets/Explosion.wav", "static")
+
+OK1 = love.audio.newSource("assets/ok1.wav", "static")
+OK2 = love.audio.newSource("assets/ok2.wav", "static")
+--OK3 = love.audio.newSource("assets/ok3.wav", "static")
+OK4 = love.audio.newSource("assets/ok4.wav", "static")
+--OK5 = love.audio.newSource("assets/ok5.wav", "static")
+OKSounds = {OK1, OK2, OK4}
+
+Done1 = love.audio.newSource("assets/done1.wav", "static")
+Done2 = love.audio.newSource("assets/done2.wav", "static")
+Done3 = love.audio.newSource("assets/done3.wav", "static")
+DoneSounds = {Done1, Done2, Done3}
+
+Dark1 = love.audio.newSource("assets/dark1.wav", "static")
+Dark2 = love.audio.newSource("assets/dark2.wav", "static")
+DarkSounds = {Dark1, Dark2}
+
+Careful1 = love.audio.newSource("assets/care1.wav", "static")
+
+Hello1 = love.audio.newSource("assets/hello1.wav", "static")
+
+function playRandomSound(soundList)
+    math.randomseed(love.timer.getTime())
+    love.audio.play(soundList[math.random(1, #soundList)])
+end
+
+
 
 
 function InitObjects()
@@ -17,13 +60,21 @@ function InitObjects()
     materials = {}
     targets = {}
     spawnUnit()
+    Torch:add{p=P(0,0)}
+    DIG_SPEED = 1
+    TORCH_LEVEL = 1
+    Torch.alpha1 = 128
+    Torch.alpha2 = 10
+    Torch.radius = 150
 end
 
 
+function spawnUnit()
+    love.audio.play(Hello1)
+    Unit:add({p=P(math.random(-50, 50), - 100)}, UNITS)
+end
 
-
-
-Torch = Entity:new{radius = 150, alpha1 = 128, alpha2 = 8, size2 = 2}
+Torch = Entity:new{radius = 150, alpha1 = 128, alpha2 = 10, size2 = 2}
 function Torch:add(o)
     local o = Entity.add(self, o, LIGHTS)
     table.insert(lights, o)
@@ -80,11 +131,29 @@ function Target:update(dt)
         newWorker:dropAll()
         self.worker = newWorker
     end
-    if map:getTile(self.p) == 0 then
-        self.destroyed = true
-        if self.worker then
-            self.worker.target = nil
-            self.worker = nil
+    if self.worker then
+        if not map:isWall(map:getTile(self.p)) then
+            local dd = Vdd(Vsub(self.worker:center(), self.p))
+            if (dd < self.worker.size[2] ^ 2) then
+                self.destroyed = true
+                if self.worker then
+                    self.worker.target = nil
+                    self.worker = nil
+                    local done = true
+                    for i = #targets, 1, -1 do
+                        if targets[i] == self then
+                            table.remove(targets, i)
+                        else
+                            if (targets[i].worker == nil and not targets[i].destroyed) then
+                                done = false
+                            end
+                        end
+                    end
+                    if done then
+                        playRandomSound(DoneSounds)
+                    end
+                end
+            end
         end
     end
 end
@@ -118,9 +187,12 @@ function Target:draw(a)
 end
 
 function markTarget(point)
+    local tileType = map:getTile(mouse)
     local target = Target:add({p=point}, FOREGROUND)
     markedSomething = true
     table.insert(targets, target)
+    playRandomSound(OKSounds)
+    return true
 end
 
 function clearTargets()
@@ -132,6 +204,7 @@ function clearTargets()
         end
         target.destroyed = true
     end
+    playRandomSound(DoneSounds)
     targets = {}
 end
 
@@ -139,7 +212,7 @@ end
 
 -- physics object
 Type.Object = Type.new()
-Object = Entity:new{t=Type.Object, onGround = false, hitWall = false, falls=true, elastic=0, drag=0, airdrag=0, size={16,16}}
+Object = Entity:new{t=Type.Object, onGround = false, hitWall = false, fallThroughPlatforms = true, falls=true, elastic=0, drag=0, airdrag=0, size={16,16}}
 function Object:add(o, layer)
     o = o or {}
     o.p = o.p or P(0, 0)
@@ -196,13 +269,14 @@ end
 
 
 --Unit
-Unit = Object:new{size={24,32}, col={140,160,240},drag=1, line={10,30,10}, capacity=30}
+Unit = Object:new{size={14,32}, col={140,160,240},drag=1, line={10,30,10}, capacity=30, facingRight=true, weaponAngle = -math.pi/4}
 function Unit:add(o, layer)
     o = o or {}
     o.actions = ActionMap:new(o)
     o.actions:add(Action.JUMP, Jump:new())
     o.actions:add(Action.THROW, Throw:new())
     o.actions:add(Action.DIG, Dig:new())
+    o.status = StatusMap:new(o)
     o.materials = {}
     table.insert(units, o)
     return Object.add(self, o, layer)
@@ -222,22 +296,25 @@ function Unit:update(dt)
     end
     
     self.actions:update(dt)
+    self.status:update(dt)
     
     -- run away from danger
     local dir = P(0,0)
+    local RUNAWAY = false
     for i = #explosives, 1, -1 do
         local e = explosives[i]
         
         if e.timer < 0.7 * Explosive.timer then
             local diff = Vsub(self:center(), e:center()) 
-            if diff == P(0,0) then
-                diff = P(1,-1)
+            if diff[1] == 0 then
+                diff[1] = math.random(-1,1)
             end
             local dd = Vdd(diff)
-            local tooclose = self.size[1]/2 + e.radius --* 1.5 * (1 - e.timer/Explosive.timer)
+            local tooclose = self.size[1]/2 + e.radius * 1.5-- * (1 - e.timer/Explosive.timer)
             if dd < tooclose ^ 2 then
-                 local dist = math.sqrt(dd)
-                 dir = Vadd(dir, Vmult(1/dist, diff)) 
+                RUNAWAY = true
+                local dist = math.sqrt(dd)
+                dir = Vadd(dir, Vmult(1/dist, diff)) 
             end
         end
         if e.destroyed then
@@ -246,7 +323,7 @@ function Unit:update(dt)
     end
 
     -- run toward current target
-    if dir ~= P(0,0) then
+    if dir[1] == 0 and dir[2] == 0 then
         local diff = nil
         if self.target then
             local target = self.target
@@ -305,6 +382,7 @@ function Unit:update(dt)
         end
     end
     
+    self.fallThroughPlatforms = false
     -- if moving somewhere, steer accordingly
     if dir ~= P(0,0) then
         if dir[1] > 0 then
@@ -313,8 +391,20 @@ function Unit:update(dt)
             self.v[1] = self.v[1] - MOVE_ACCEL * dt
         end
         
-        if dir[2] < 0 and math.abs(dir[2]) > math.abs(dir[1]) then
+        if RUNAWAY and dir[2] < 0 then
             self.actions:use(Action.JUMP)
+        elseif dir[2] < 0 and math.abs(dir[2]) > math.abs(dir[1]) then
+            self.actions:use(Action.JUMP)
+            -- place platforms (sort of like building a ladder)
+            if not self.onGround and self.v[2] > 0 then
+                local pos = P(self.p[1] + self.size[1] / 2, self.p[2] + self.size[2] + map.unit/2)
+                local tileType = map:getTile(pos)
+                if map:isBKG(tileType) then
+                    map:setTile(pos, Map.PLATFORM) 
+                end
+            end
+        elseif dir[2] > 0 and math.abs(dir[2]) > math.abs(dir[1]) then
+            self.fallThroughPlatforms = true
         end
     end
     --
@@ -327,6 +417,11 @@ function Unit:update(dt)
     
     
     self.v[1] = math.max(-MAX_SPEED, math.min(self.v[1], MAX_SPEED))
+    if self.v[1] > 20 then
+        self.facingRight = true
+    elseif self.v[1] < -20 then
+        self.facingRight = false
+    end
     Object.update(self, dt)
 
     -- update the position of any carried materials
@@ -340,17 +435,33 @@ function Unit:update(dt)
     end    
     
     -- place torches
-    local pos = self:center()
+    local pos = P(self.p[1] + self.size[1]/2 ,self.p[2] + self.size[2] - 4)
     local gx, gy = map:gridCoordinate(pos)
-    if map.surface[gx] and onScreen(pos) then
-        -- don't spawn a torch in the 1st frame, before the map has become infinite
+    if map.surface[gx] then
         if gy < map.surface[gx] then 
             pos[2] = pos[2] + (map.surface[gx] - gy) * map.unit
         end
-        local screenPos = ScreenCoordinate(pos) 
-        local r = buffer:getPixel(math.floor(screenPos[1]), math.floor(screenPos[2]))
-        if r < 64 then
-            Torch:add{p=pos}
+        if self.onGround then
+            if onScreen(pos) then
+                -- don't spawn a torch in the 1st frame, before the map has become infinite
+                local screenPos = ScreenCoordinate(pos) 
+                local r = buffer:getPixel(math.floor(screenPos[1]), math.floor(screenPos[2]))
+                if r < 64 then
+                    playRandomSound(DarkSounds)
+                    Torch:add{p=pos}
+                end
+            else
+                local dark = true
+                for i,torch in ipairs(lights) do
+                    local dd = Vdd(Vsub(torch.p, pos))
+                    if dd < Torch.radius ^ 2 then
+                        dark = false
+                    end
+                end
+                if dark then
+                    Torch:add{p=pos}
+                end
+            end
         end
     end
 end
@@ -379,16 +490,45 @@ function Unit:dropAll()
     self.materials = {}
 end
 
-
+function Unit:draw(a)
+    local a = a or 255
+    --love.graphics.setColor(0,0,0)
+    --love.graphics.rectangle("line", self.p[1], self.p[2], self.size[1], self.size[2])
+    local sx, sy = 0.5, 0.5
+    if self.facingRight then
+        sx = - sx
+    end
+    love.graphics.setColor(255,255,255,a)
+    love.graphics.draw(UnitImage, self.p[1]+self.size[1]/2, self.p[2] + self.size[2]/2, 0, sx, sy, UnitImage:getWidth()/2, UnitImage:getHeight()/2)
+    local r = self.weaponAngle
+    if self.status:has(Digging) then
+        local swingArc = math.pi/4
+        if self.facingRight then
+            r = r - swingArc * self.status:duration(Digging) / Dig.maxcd
+        else
+            r = r + swingArc * self.status:duration(Digging) / Dig.maxcd
+        end
+    else
+        if self.facingRight then
+            self.weaponAngle = -math.pi/4
+        else
+            self.weaponAngle = math.pi + math.pi/4
+        end
+        r = self.weaponAngle
+    end
+    love.graphics.draw(PickImage, self.p[1]+self.size[1]/2, self.p[2] + 2 * self.size[2]/3, r, 0.5, 0.5, 2, PickImage:getHeight()/2)
+end
 
 
 
 
 
 -- little resource blocks
-Material = Object:new{size={8,8}, resource=0, elastic = 0.4, drag = 1, line = {30,0,0}}
+Material = Object:new{size={8,8}, resource=0, elastic = 0.4, drag = 1, line = {10,10,10}}
 function Material:add(o, layer)
     local o = Object.add(self, o, layer)
+    -- the center of the material should be at it's initial pos
+    o.p = Vsub(o.p, Vmult(0.5, o.size))
     table.insert(materials, o)
     return o
 end
@@ -412,11 +552,14 @@ function Explosive:update(dt)
     self.timer = self.timer - dt
     if self.timer <= 0 then
         self.destroyed = true
+        if onScreen(self:center()) then
+            love.audio.play(ExplosionSound)
+        end
         ps:explode(self.p, self.radius*2/3)
         -- destroy tiles
         for _, tile in ipairs(map:getTilesNear(self:center(), self.radius)) do
-            if tile.val ~= 0 then
-                map:setTile(tile.p, 0)
+            if map:isWall(tile.val) then
+                map:setTile(tile.p, Map.BKG)
                 -- spawn debris / gold object
                 local dir = - math.random() * math.pi
                 local spd = 50 + math.random() * 200
@@ -426,6 +569,11 @@ function Explosive:update(dt)
         end
     end
     Object.update(self, dt)
+end
+function Explosive:draw(a)
+    local a = a or 255
+    love.graphics.setColor(255,255,255, a)
+    love.graphics.draw(TNTImage, self.p[1]+self.size[1]/2, self.p[2] + self.size[2]/2, 0, 1, 1, TNTImage:getWidth()/2, TNTImage:getHeight()/2)
 end
 
 
@@ -442,6 +590,7 @@ end
 function Jump:use()
     if self:ready() then
         self.owner.v[2] = JUMP_SPEED
+        --love.audio.play(JumpSound)
         Action.use(self)
     end
 end
@@ -453,6 +602,9 @@ Throw = Action:new{maxcd = 0.5}
 
 function Throw:use(direction, speed)
     if self:ready() then
+        if onScreen(self.owner:center()) then
+            love.audio.play(Careful1)
+        end
         local pos = Vsub(self.owner:center(), Vmult(0.5, Explosive.size))
         local spd = Vscale(direction, speed)
         local expl = Explosive:add({p=pos, v=spd}, OBJECTS)
@@ -463,13 +615,11 @@ function Throw:use(direction, speed)
 end
 
 
-
 -- Dig in some direction (left or right with slight vertical)
 -- Dig a single tile or a row of tiles?
 Dig = Action:new{maxcd = 0.15}
 function Dig:use(direction)
     if self:ready() then
-        Action.use(self)
         local u = self.owner
         -- vertical dig
         if math.abs(direction[2]) > math.abs(direction[1]) then
@@ -477,13 +627,21 @@ function Dig:use(direction)
             for x = u.p[1] , u.p[1] + u.size[1], map.unit do
                 local p = P(x,y)
                 local tileType = map:getTile(p)
-                if tileType ~= 0 then
-                    map:setTile(p, 0)
+                if map:isWall(tileType) then
+                    local tileP = map:setTile(p, Map.BKG)
                     -- spawn debris / gold object
                     local dir = Vangleof(direction) + math.pi + (math.random() - 0.5) * (math.pi / 4)
                     local spd = 20 + math.random() * 80
                     local v = Vmult(spd, Vxyof(dir))
-                    Material:add({p=p, v=v, resource=tileType, col=Map.colors[tileType]}, DEBRIS)
+                    Material:add({p=tileP, v=v, resource=tileType, col=Map.colors[tileType]}, DEBRIS)
+                    -- player status : digging
+                    local duration = Map.digTime[tileType]/DIG_SPEED
+                    self.cd = duration
+                    self.owner.status:add(Digging:new(), duration)
+                    self.owner.weaponAngle = Vangleof(direction)
+                    if onScreen(self.owner:center()) then
+                        playRandomSound(DigSounds)
+                    end
                     break
                 end
             end
@@ -493,13 +651,21 @@ function Dig:use(direction)
             for y = u.p[2] + map.unit/2 , u.p[2] + u.size[2], map.unit do
                 local p = P(x,y)
                 local tileType = map:getTile(p)
-                if tileType ~= 0 then
-                    map:setTile(p, 0)
+                if map:isWall(tileType) then
+                    local tileP = map:setTile(p, Map.BKG)
                     -- spawn debris / gold object
                     local dir = Vangleof(direction) + math.pi + (math.random() - 0.5) * (math.pi / 4)
                     local spd = 20 + math.random() * 80
                     local v = Vmult(spd, Vxyof(dir))
-                    Material:add({p=p, v=v, resource=tileType, col=Map.colors[tileType]}, DEBRIS)
+                    Material:add({p=tileP, v=v, resource=tileType, col=Map.colors[tileType]}, DEBRIS)
+                    -- player status : digging
+                    local duration = Map.digTime[tileType]/DIG_SPEED
+                    self.cd = duration
+                    self.owner.status:add(Digging:new(), duration)
+                    self.owner.weaponAngle = Vangleof(direction)
+                    if onScreen(self.owner:center()) then
+                        playRandomSound(DigSounds)
+                    end
                     break
                 end
             end

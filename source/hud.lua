@@ -13,9 +13,10 @@ resourceIcons = {}
 inventory = {}
 
 function collect(resource, qty)
-    if resource ~= 0 then
-        inventory[resource] = (inventory[resource] or 0) + (qty or 1)
+    if resource == Map.DARK_ROCK then
+        resource = Map.ROCK
     end
+    inventory[resource] = (inventory[resource] or 0) + (qty or 1)
 end
 
 function consume(resource, qty)
@@ -29,40 +30,55 @@ end
 
 function gameUI()
     local ui = BoxRel(width,height, false)
-    local b = BoxV(150,height-40,false)
-    b.alignV = ALIGNV.BOTTOM
-    ui:add(b,REL.E)
-    --[[
+    screenSizes = BoxV(150,height-40,false)
+    screenSizes.alignV = ALIGNV.BOTTOM
+    ui:add(screenSizes,REL.E)
+    
     local b2
-    b2 = BoxV(120,30)
-    b2.label = "Toggle Lines"
-    b2.onclick = function() OUTLINES = not OUTLINES end
-    b:add(b2)
+    --b2 = BoxV(120,30)
+    --b2.label = "Toggle Lines"
+    --b2.onclick = function() OUTLINES = not OUTLINES end
+    --b:add(b2)
     if SIZE ~= SMALL then
         b2 = BoxV(120,30)
         b2.label = "Small"
         b2.onclick = function() setSize(SMALL) end
-        b:add(b2)
+        screenSizes:add(b2)
     end
     if SIZE ~= MEDIUM then
         b2 = BoxV(120,30)
         b2.label = "Medium"
         b2.onclick = function() setSize(MEDIUM) end
-        b:add(b2)
+        screenSizes:add(b2)
     end
     if SIZE ~= LARGE then
         b2 = BoxV(120,30)
         b2.label = "Large"
         b2.onclick = function() setSize(LARGE) end
-        b:add(b2)
+        screenSizes:add(b2)
     end
-    ]]
-    local b3 = BoxV(150, height-40, false)
-    buildUnit = BoxV(120,70)
+    
+
+
+    
+    -- PURCHASES
+    local b3 = BoxV(170, height-40, false)
+
+    buildUnit = BoxV(140,70)
     buildUnit.onclick = purchaseUnit
     b3:add(buildUnit)
-    ui:add(b3,REL.E)
+
+    digFaster = BoxV(140,70)
+    digFaster.onclick = purchaseDigFaster
+    b3:add(digFaster)
+
+    betterTorches = BoxV(140,70)
+    betterTorches.onclick = purchaseBetterTorches
+    b3:add(betterTorches)
     
+    ui:add(b3,REL.E)
+
+
     if UI then
         UI.ui = ui
     else
@@ -73,26 +89,79 @@ function gameUI()
     end
 end
 
-unitCost = {[Map.GOLD]=1, [Map.SILVER]=1}
+
+
+
+-- purchase functions
+unitCost = {[Map.GOLD]=2, [Map.SILVER]=2}
+digFasterCost = {[Map.DIRT]=15, [Map.ROCK]=20}
+betterTorchesCost = {[Map.SAND]=25, [Map.ROCK]=10}
+
+function purchaseDigFaster()
+    -- check balance
+    for res, qty in pairs(digFasterCost) do
+        if (inventory[res] or 0) < qty then
+            return
+        end
+    end
+    -- descrease balance
+    for res, qty in pairs(digFasterCost) do
+        inventory[res] = (inventory[res] or 0) - qty
+        digFasterCost[res] = qty * 2
+    end
+    builtSomething = true
+    DIG_SPEED = DIG_SPEED + 1
+end
+
+function purchaseBetterTorches()
+    -- check balance
+    for res, qty in pairs(betterTorchesCost) do
+        if (inventory[res] or 0) < qty then
+            return
+        end
+    end
+    -- descrease balance
+    for res, qty in pairs(betterTorchesCost) do
+        inventory[res] = (inventory[res] or 0) - qty
+        betterTorchesCost[res] = math.floor(qty * 1.3)
+    end
+    builtSomething = true
+    TORCH_LEVEL = TORCH_LEVEL + 1
+    if TORCH_LEVEL <= 10 then
+        Torch.alpha2 = Torch.alpha2 + 2
+        Torch.alpha1 = Torch.alpha1 + 6
+    end
+    Torch.radius = Torch.radius + 4
+end
 
 function purchaseUnit()
     -- check balance
     for res, qty in pairs(unitCost) do
         if (inventory[res] or 0) < qty then
-            print("not enough " .. res)
             return
         end
     end
     -- descrease balance
     for res, qty in pairs(unitCost) do
         inventory[res] = (inventory[res] or 0) - qty
+        unitCost[res] = math.floor(qty * 1.6)
     end
     builtSomething = true
     spawnUnit()
 end
 
-function spawnUnit()
-    Unit:add({p=P(math.random(-50, 50), - 100)}, UNITS)
+
+function drawButtonInfo(box, msg, cost)
+    local x,y = box:screenPosition()
+    local w,h = box.w, box.h
+    love.graphics.setColor(0,0,0)
+    love.graphics.printf(msg,x,y+5,w,"center")
+    local i = 0
+    local numIcons = numEntries(cost)
+    for res, qty in pairs(cost) do
+        drawCost(x + w/2 + (i - (numIcons-1)/2) * 44, y + 40, res, qty)
+        i = i + 1
+    end
 end
 
 HUD = Layer:new()
@@ -107,6 +176,7 @@ function HUD:draw()
     love.graphics.setColor(255, 255, 255)
     love.graphics.print("Entities: " .. #entities,20,35)
     love.graphics.print("Tiles on screen: " .. tilecount,20,50)
+    love.graphics.print("Fire particles: " .. ps.fire:getCount(),20,65)
 
     local n = numEntries(inventory)
     local i = 0
@@ -120,17 +190,9 @@ function HUD:draw()
     end
     
     -- draw costs for build buttons
-    local box = buildUnit
-    local x,y = box:screenPosition()
-    local w,h = box.w, box.h
-    love.graphics.setColor(0,0,0)
-    love.graphics.printf("Build a Unit",x,y+5,w,"center")
-    local i = 0
-    local numIcons = numEntries(unitCost)
-    for res, qty in pairs(unitCost) do
-        drawCost(x + w/2 + (i - (numIcons-1)/2) * 32, y + 40, res, qty)
-        i = i + 1
-    end
+    drawButtonInfo(buildUnit, "Build a Unit (" .. #units .. ")", unitCost)
+    drawButtonInfo(digFaster, "Dig Faster (" .. DIG_SPEED - 1 .. ")", digFasterCost)
+    drawButtonInfo(betterTorches, "Better Torches (" .. TORCH_LEVEL - 1 .. ")", betterTorchesCost)
     
     local y = height/2 - 22
     local w,h = 200,44
@@ -159,7 +221,7 @@ function HUD:draw()
         y = y + h + 4
     else
         if not builtSomething then
-            notify("If you have enough resources, you can purchase more units",x, y, w, h)
+            notify("If you have enough resources, you can purchase stuff.",x, y, w, h)
             y = y + h + 4
         end
         if scrolled < 20 then
@@ -167,6 +229,11 @@ function HUD:draw()
             y = y + h + 4
         end
     end
+    
+    love.graphics.setColor(255,255,255)
+    local box = screenSizes.children[1]
+    local px, py = box:screenPosition()
+    love.graphics.printf("Screen Size: ",px, py - 20, box.w, "center")
 end
 
 function drawIcon(resource, x, y)

@@ -37,10 +37,16 @@ function setSize(size)
     local s = WINDOW_SIZES[size]
     SIZE = s.size
     if s.w ~= width or s.h ~= height then
+        local mx, my = love.mouse.getPosition()
+        local dx,dy = mx - width, my - height
         love.window.setMode(s.w,s.h)
+        love.mouse.setPosition(s.w + dx, s.h + dy)
         width = s.w
         height = s.h
         buffer = love.graphics.newCanvas(width, height)
+        -- initially white so that the player doesnt spawn a new torch whenever you resize the screen
+        buffer:clear(255, 255, 255, 255)
+        
         screenCenter = P(width/2, height/2)
         gameUI()
     end
@@ -60,7 +66,7 @@ function Game:load()
     builtSomething = false
     scrolled = 0
     
-    setSize(LARGE)
+    setSize(MEDIUM)
     OUTLINES = true
     gameUI()
     
@@ -86,6 +92,22 @@ function Game:update(dt)
     screenMouse = P(mx, my)
     mouse = GameCoordinate(screenMouse)
         
+    -- move camera
+    local border = 10
+    local camspeed = 400
+    local prox = math.max(border - mx, border - my, mx - (width - border - 1), my - (height - border - 1))
+    
+    if prox > 0 and prox <= border then
+        -- mouse position is off the screen during resize
+        local dir = unitV(Vsub(screenMouse, screenCenter))
+        scrolled = scrolled + camspeed * dt * prox / border
+        camera = Vadd(camera, Vmult(camspeed * dt * prox / border, dir))
+    end
+    
+    screenMin = GameCoordinate(P(0,0))
+    screenMax = GameCoordinate(P(width,height))
+
+    -- update objects
 	for i = #entities,1,-1 do
 		local o = entities[i]
         o:update(dt)
@@ -94,23 +116,6 @@ function Game:update(dt)
             table.remove(entities,i)
         end
 	end
-    
-    for k,dir in pairs(DIRS) do
-        if love.keyboard.isDown(KEYS[k]) then
-            moved[k] = true
-        end
-    end
-    
-    local border = 10
-    local camspeed = 400
-    local prox = math.max(border - mx, border - my, mx - (width - border - 1), my - (height - border - 1))
-    if prox > 0 then
-        local dir = unitV(Vsub(screenMouse, screenCenter))
-        scrolled = scrolled + camspeed * dt * prox / border
-        camera = Vadd(camera, Vmult(camspeed * dt * prox / border, dir))
-    end
-    screenMin = GameCoordinate(P(0,0))
-    screenMax = GameCoordinate(P(width,height))
 end
 
 
@@ -180,16 +185,12 @@ function Canvas:draw()
     love.graphics.pop()    
 end
 
-function Canvas:mousepress(x,y, button, isrepeat)
-    if button == "r" and not isrepeat then
+function Canvas:mousepress(x,y, button)
+    if button == "r" then
         clearTargets()
         return true
-    elseif  button == "l" and not isrepeat then
-        local tileType = map:getTile(mouse)
-        if tileType ~= 0 then
-            markTarget(mouse)
-            return true
-        end
+    elseif  button == "l" then
+        return markTarget(mouse)
     end
     return false
 end
