@@ -174,9 +174,9 @@ function HUD:draw()
     love.graphics.rectangle("line",tl[1],tl[2],wh[1],wh[2])
 
     love.graphics.setColor(255, 255, 255)
-    love.graphics.print("Entities: " .. #entities,20,35)
-    love.graphics.print("Tiles on screen: " .. tilecount,20,50)
-    love.graphics.print("Fire particles: " .. ps.fire:getCount(),20,65)
+    --love.graphics.print("Entities: " .. #entities,20,35)
+    --love.graphics.print("Tiles on screen: " .. tilecount,20,50)
+    --love.graphics.print("Fire particles: " .. ps.fire:getCount(),20,65)
 
     local n = numEntries(inventory)
     local i = 0

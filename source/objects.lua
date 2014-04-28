@@ -283,18 +283,6 @@ function Unit:add(o, layer)
 end
 
 function Unit:update(dt)
-    for k,dir in pairs(DIRS) do
-        if love.keyboard.isDown(KEYS[k]) then
-            if k == "LEFT" then
-                self.v[1] = self.v[1] - MOVE_ACCEL * dt
-            elseif k == "RIGHT" then
-                self.v[1] = self.v[1] + MOVE_ACCEL * dt
-            elseif k == "UP" then
-                self.actions:use(Action.JUMP)
-            end
-        end
-    end
-    
     self.actions:update(dt)
     self.status:update(dt)
     
