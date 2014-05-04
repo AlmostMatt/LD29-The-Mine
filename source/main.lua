@@ -60,6 +60,12 @@ function love.keyreleased(key)
     activestate:keyrelease(key)
 end
 
+
+function love.focus(hasFocus)
+    PAUSED = not hasFocus
+end
+
+
 function loadstate(s)
     activestate = s
     s:load()

@@ -88,62 +88,64 @@ function Game:load()
     ps = ParticleSystem:add({}, PARTICLES)
     map = Map:add({}, TILES)
     
-    love.mouse.setGrabbed(true)
+    --love.mouse.setGrabbed(true)
     camera = P(0,140)
     Game:update(1/30) --force an update before any draw function is possible.
 end
 
 function Game:update(dt)
-	dt = math.min(dt,1/30)
-    frame = frame + 1
-    mx,my = love.mouse.getPosition()
-    screenMouse = P(mx, my)
-    mouse = GameCoordinate(screenMouse)
+    if not PAUSED then
+        dt = math.min(dt,1/30)
+        frame = frame + 1
+        mx,my = love.mouse.getPosition()
+        screenMouse = P(mx, my)
+        mouse = GameCoordinate(screenMouse)
+            
+        -- move camera
+        local border = 10
+        local camspeed = 400
+        local prox = math.max(border - mx, border - my, mx - (width - border - 1), my - (height - border - 1))
         
-    -- move camera
-    local border = 10
-    local camspeed = 400
-    local prox = math.max(border - mx, border - my, mx - (width - border - 1), my - (height - border - 1))
-    
-    if prox > 0 and prox <= border then
-        -- mouse position is off the screen during resize
-        local dir = unitV(Vsub(screenMouse, screenCenter))
-        scrolled = scrolled + camspeed * dt * prox / border
-        camera = Vadd(camera, Vmult(camspeed * dt * prox / border, dir))
-    end
-    
-    screenMin = GameCoordinate(P(0,0))
-    screenMax = GameCoordinate(P(width,height))
-
-    -- update objects
-	for i = #entities,1,-1 do
-		local o = entities[i]
-        o:update(dt)
-		
-		if o.destroyed then
-            table.remove(entities,i)
+        if prox > 0 and prox <= border then
+            -- mouse position is off the screen during resize
+            local dir = unitV(Vsub(screenMouse, screenCenter))
+            scrolled = scrolled + camspeed * dt * prox / border
+            camera = Vadd(camera, Vmult(camspeed * dt * prox / border, dir))
         end
-	end
-    
-    
-    --[[
-    if newTiles ~= 0 then
-        print("Smooth " .. newTiles .. " new tiles in  " .. smoothTime .." s")
-        print("Flood " .. newTiles .. " new tiles in  " .. floodTime .." s")
+        
+        screenMin = GameCoordinate(P(0,0))
+        screenMax = GameCoordinate(P(width,height))
+
+        -- update objects
+        for i = #entities,1,-1 do
+            local o = entities[i]
+            o:update(dt)
+            
+            if o.destroyed then
+                table.remove(entities,i)
+            end
+        end
+        
+        
+        --[[
+        if newTiles ~= 0 then
+            print("Smooth " .. newTiles .. " new tiles in  " .. smoothTime .." s")
+            print("Flood " .. newTiles .. " new tiles in  " .. floodTime .." s")
+        end
+        if mergedTiles ~= 0 then
+            print("Flood merge " .. mergedTiles .. " existing tiles in " .. floodTime2 .. "s")
+        end
+        ]]
+        --print("time spent on pathing: " .. pathingTime .. "s")
+        pathingTime = 0
+        --[[
+        newTiles = 0
+        mergedTiles = 0
+        smoothTime = 0
+        floodTime = 0
+        floodTime2 = 0
+        ]]
     end
-    if mergedTiles ~= 0 then
-        print("Flood merge " .. mergedTiles .. " existing tiles in " .. floodTime2 .. "s")
-    end
-    ]]
-    --print("time spent on pathing: " .. pathingTime .. "s")
-    pathingTime = 0
-    --[[
-    newTiles = 0
-    mergedTiles = 0
-    smoothTime = 0
-    floodTime = 0
-    floodTime2 = 0
-    ]]
 end
 
 pathingTime = 0
@@ -211,14 +213,20 @@ function Canvas:draw()
             love.graphics.translate(width/2-p[1],height/2-p[2])
         elseif layer == MAP_OVERLAY then
             map:drawOverlay()
-            for _, u in ipairs(units) do
+            if DEBUG_PATHING then
+                for _, u in ipairs(units) do
                 --map:raycastPoints(u:center(), mouse)
-                map:findPath(u, mouse)
+                    map:findPath(u, mouse)
+                end
             end
         end
     end
     
-    love.graphics.pop()    
+    love.graphics.pop()
+    if PAUSED then
+        love.graphics.setColor(255,255,255, 128)
+        love.graphics.rectangle("fill", 0,0,width,height)
+    end
 end
 
 function Canvas:mousepress(x,y, button)

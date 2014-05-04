@@ -3,9 +3,10 @@ require("almost/entity")
 
 DEBUG_COLLISION = false -- no longer does anything
 DEBUG_GENERATION = false
-DEBUG_NO_SHADOWS = true
-DEBUG_REGIONS = true
+DEBUG_NO_SHADOWS = false
+DEBUG_REGIONS = false
 DEBUG_INFO = true
+DEBUG_PATHING = false
 
 DEBUG_COLORS = {
     {255,128,128},
@@ -252,8 +253,9 @@ function Map:setTile(p, value)
     self:extendMap(gx, gy)
     -- don't let the user build platforms in midair
     if gy >= self.surface[gx] or (not self:isPlatform(value)) then
-        local oldValue = self.tiles[gx][gy].val
-        self.tiles[gx][gy].val = value
+        local tile = self.tiles[gx][gy]
+        local oldValue = tile.val
+        tile.val = value
         self:tileChanged(gx, gy, oldValue, value)
     end
     local tileP = P((gx+0.5) * self.unit, (gy+0.5) * self.unit)
@@ -261,6 +263,14 @@ function Map:setTile(p, value)
 end
 
 function Map:tileChanged(gx, gy, oldValue, newValue)
+    --update image info immediately
+    local tileObj = self.tiles[gx][gy]
+    tileObj.img = nil
+    tileObj.flipped = nil
+    tileObj.rotation = nil
+    tileObj.transparent = nil
+    self:getTileInfo(tileObj, gx, gy)
+
     -- update region information
     if self:isWall(oldValue) ~= self:isWall(newValue) then
         local adjacent = self:getAdjacent(gx, gy)
