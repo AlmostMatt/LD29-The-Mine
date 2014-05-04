@@ -215,4 +215,5 @@ pip-log.txt
 .mr.developer.cfg
 *.url
 particleEditor (not mine)/*
+unused/*
 *.lnk

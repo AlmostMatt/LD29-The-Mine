@@ -2,6 +2,7 @@ require("almost/entity")
 require("objects")
 require("particlesystem")
 require("map")
+require("pathfind")
 require("hud")
 
 Game = State:new()
@@ -123,11 +124,34 @@ function Game:update(dt)
             table.remove(entities,i)
         end
 	end
+    
+    
+    --[[
+    if newTiles ~= 0 then
+        print("Smooth " .. newTiles .. " new tiles in  " .. smoothTime .." s")
+        print("Flood " .. newTiles .. " new tiles in  " .. floodTime .." s")
+    end
+    if mergedTiles ~= 0 then
+        print("Flood merge " .. mergedTiles .. " existing tiles in " .. floodTime2 .. "s")
+    end
+    ]]
+    --print("time spent on pathing: " .. pathingTime .. "s")
+    pathingTime = 0
+    --[[
+    newTiles = 0
+    mergedTiles = 0
+    smoothTime = 0
+    floodTime = 0
+    floodTime2 = 0
+    ]]
 end
 
-
-
-
+pathingTime = 0
+mergedTiles = 0
+newTiles = 0
+smoothTime = 0
+floodTime = 0
+floodTime2 = 0
 
 function ScreenCoordinate(pos)
     return Vadd(Vsub(pos, camera), screenCenter)
@@ -148,7 +172,7 @@ function Canvas:draw()
     
     love.graphics.push()
     local p = camera
-    love.graphics.translate(width/2-p[1],height/2-p[2])
+    love.graphics.translate(math.floor(width/2-p[1]),math.floor(height/2-p[2]))
     
     -- draw a light mask to the canvas)
     -- there is light around each unit
@@ -176,7 +200,7 @@ function Canvas:draw()
                 table.remove(drawables[layer],i)
             end
         end
-        if layer == SHADOW then
+        if layer == SHADOW and not DEBUG_NO_SHADOWS then
             -- apply the shadow mask
             love.graphics.pop()    
             love.graphics.setColor(255,255,255,255)
@@ -187,8 +211,13 @@ function Canvas:draw()
             love.graphics.translate(width/2-p[1],height/2-p[2])
         elseif layer == MAP_OVERLAY then
             map:drawOverlay()
+            for _, u in ipairs(units) do
+                --map:raycastPoints(u:center(), mouse)
+                map:findPath(u, mouse)
+            end
         end
     end
+    
     love.graphics.pop()    
 end
 
@@ -197,6 +226,7 @@ function Canvas:mousepress(x,y, button)
         clearTargets()
         return true
     elseif  button == "l" then
+        local gx, gy = map:gridCoordinate(mouse)
         return markTarget(mouse)
     end
     return false

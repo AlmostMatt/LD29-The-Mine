@@ -1,82 +1,45 @@
 require("almost/vmath")
 require("almost/entity")
-    
-Type.Map = Type.new()
-Map = Entity:new{t=Type.Map, x1 = 0, x2 = 0, y1 = 0, y2 = 0, unit = 12}
--- underground tiles
--- must be indexed from 1 to n
-Map.numTiles = 0
-function Map.nextType()
-    Map.numTiles = Map.numTiles + 1
-    return Map.numTiles
-end
-Map.DIRT = Map.nextType()
-Map.ROCK = Map.nextType()
-Map.SILVER = Map.nextType()
-Map.GOLD = Map.nextType()
-Map.MOONSTONE = Map.nextType()
-Map.SAND = Map.nextType()
-Map.DARK_ROCK = Map.nextType()
-Map.BKG = Map.nextType()
-Map.BLUE_ROCK = Map.nextType()
 
-Map.BLANK = Map.nextType()
+DEBUG_COLLISION = false -- no longer does anything
+DEBUG_GENERATION = false
+DEBUG_NO_SHADOWS = true
+DEBUG_REGIONS = true
+DEBUG_INFO = true
 
-Map.BKG4 = Map.nextType()
-Map.BKG5 = Map.nextType()
-Map.BKG2 = Map.nextType()
-Map.BKG3 = Map.nextType()
-
--- unnatural/surface (not randomly placed) tiles
-Map.GRASS = Map.nextType()
-Map.PLATFORM = Map.nextType()
-Map.LAST_TYPE = Map.numTiles
-
-Map.biomes = {
-    {
-        depth = 8,
-        bkg = Map.BKG,
-        frequency = {1000, 100,  0, 0, 0, 40, 0, 300, 0}, -- initial frequency before smoothing
-        spreadRate = {20, 4, 2, 2, 4, 2, 4, 6, 10} -- "expected" frequency in a group of size ~25
-    },
-    {   -- near surface
-        depth = 80,
-        bkg = Map.BKG,
-        frequency = {1000, 100,  6, 6, 1, 35, 1, 400, 0},
-        spreadRate = {20, 4, 2, 2, 4, 2, 4, 8, 10} 
-    },
-    {   -- mostly rock
-        depth = 150,
-        bkg = Map.BKG2,
-        frequency = {100, 1000,  7, 7, 5, 40, 100, 500, 0},
-        spreadRate = {4, 20, 2, 2, 2, 3, 4, 8, 10} 
-    },
-    {   -- mostly dark rock
-        depth = 260, 
-        bkg = Map.BKG3,
-        frequency = {10, 350,  8, 8, 5, 20, 800, 400, 1},
-        spreadRate = {3, 10, 3, 3, 3, 5, 20, 8, 10} 
-    },
-    {   -- mostly blue rock
-        depth = 350, -- 500  is very deep, it takes a long time to reach
-        bkg = Map.BKG5,
-        frequency = {0, 0,  8, 8, 5, 20, 150, 420, 800},
-        spreadRate = {3, 4, 3, 3, 3, 5, 5, 8, 20} 
-    },
-    {   -- same as 2 before, slightly more gold/silver/sand/dirt
-        depth = 500, 
-        bkg = Map.BKG4,
-        frequency = {15, 350,  9, 9, 5, 25, 800, 400, 1},
-        spreadRate = {4, 10, 3, 3, 3, 5, 20, 8, 10} 
-    },
+DEBUG_COLORS = {
+    {255,128,128},
+    {255,255,0},
+    {0,128,255},
+    {128,255,128},
+    {0,128,0},
+    {128,0,0},
+    {0,0,128}
 }
 
--- load tile images
-Map.tileset = love.graphics.newImage( "assets/tiles.png")
-Map.batch = love.graphics.newSpriteBatch(Map.tileset, 8000, "stream")
-Map.quads = {}
-for tile = 1, Map.LAST_TYPE do
-    Map.quads[tile] = love.graphics.newQuad(1 + (tile-1) * (Map.unit + 2), 1, Map.unit, Map.unit, Map.tileset:getWidth(), Map.tileset:getHeight())
+Type.Map = Type.new()
+Map = Entity:new{t=Type.Map, x1 = 0, x2 = 0, y1 = 0, y2 = 0, unit = 12, blocksize = 16}
+require("tileset")
+function Map:add(o, layer)
+    o = o or {}
+    o = Entity.add(self, o, layer)
+    o.origin = o.origin or P(0,0)
+    o.surface = {}
+    o.tiles = {}
+    o.surface[0] = 0
+    o.numRegions = 0
+    o.regionSizes = {}
+    o:extendMap(0, 0)
+    --[[
+    o.tiles[0] = {}
+    o.tiles[0][0] = o:newTile(o:randomTile(0, 0))
+    if not o:isWall(o:gridValue(0,0)) then
+        o.tiles[0][0].region = 1
+        o.regionSizes[1] = 1
+        o.numRegions = 1
+    end
+    ]]
+    return o
 end
 
 Map.colors = {
@@ -107,9 +70,6 @@ Map.digTime = {
 
 BKGColor = {54, 37, 27}
 
-DEBUG_COLLISION = false
-
-
 -- tile type information
 function Map:isWall(tileType)
     return (not self:isBKG(tileType)) and (not self:isPlatform(tileType))
@@ -121,10 +81,6 @@ end
 
 function Map:isPlatform(tileType)
     return tileType == Map.PLATFORM
-end
-
-function Map:canRotate(tileType)
-    return tileType ~= Map.GRASS and tileType ~= Map.PLATFORM
 end
 
 function Map:biome(x,y)
@@ -164,18 +120,6 @@ function Map:randomTile(x, y)
     end
 end
 
-function Map:add(o, layer)
-    o = o or {}
-    o = Entity.add(self, o, layer)
-    o.origin = o.origin or P(0,0)
-    o.surface = {}
-    o.tiles = {}
-    o.surface[0] = 0
-    o.tiles[0] = {}
-    o.tiles[0][0] = o:newTile(o:randomTile(0, 0))
-    return o
-end
-
 function Map:redraw()
 -- TODO
 -- only redraw the map when the camera has moved a full tile's distance, or if a tile was destroyed/created this frame
@@ -191,28 +135,44 @@ function Map:draw()
     Map.batch:clear()
     for x = x1, x2 do
         for y = y1, y2 do
-            local tileType = self:gridValue(x, y)
-            if self:isPlatform(tileType) or self:isBKG(tileType) and y >= self.surface[x] then
-                local bkgType = self:biome(x,y).bkg
-                self:drawTile(bkgType, x, y)
-            end
-            if not self:isBKG(tileType) then
-                self:drawTile(tileType, x, y)
+            if (not DEBUG_GENERATION) or self:containsTile(x,y) then
+                local tileType = self:gridValue(x, y)
+                local tile = self:getTileObject(x, y)
+                if (tile.transparent or self:isBKG(tileType)) and y > self.surface[x] then
+                --if self:isPlatform(tileType) or self:isBKG(tileType) and y >= self.surface[x] then
+                    local bkgType = self:biome(x,y).bkg
+                    local bkgImage = self.backgroundImages[bkgType]
+                    if DEBUG_REGIONS then
+                        Map.batch:setColor(DEBUG_COLORS[1 + (tile.region % #DEBUG_COLORS)])
+                        self:drawTileImage(bkgImage, x, y)
+                        Map.batch:setColor(255,255,255)
+                    else
+                        self:drawTileImage(bkgImage, x, y)
+                    end
+                end
+                if not self:isBKG(tileType) then
+                    self:drawTile(tile, x, y)
+                end
             end
         end
         Map.batch:unbind()
         love.graphics.draw(Map.batch, 0, 0)
     end
-    self:drawGrid()
+    --self:drawGrid()
 end
 
-function Map:drawTile(tileType, gx, gy)
-    local r = 0
-    if self:canRotate(tileType) then
-        math.randomseed(gx * gy + gx + gy)
-        r = math.pi * math.random(0,3)/2
+function Map:drawTile(tile, gx, gy)
+    -- if debug generation is on, don't draw tiles that depend on unknown adjacent materials
+    if (not DEBUG_GENERATION) or (self:containsTile(gx - 1, gy) and self:containsTile(gx + 1, gy) and self:containsTile(gx, gy - 1) and self:containsTile(gx, gy + 1)) then
+        if not tile.img then
+            self:getTileInfo(tile, gx, gy)
+        end
+        self:drawTileImage(tile.img, gx, gy, tile.flipped, tile.rotation)
     end
-    Map.batch:add(Map.quads[tileType], (gx + 0.5) * self.unit, (gy + 0.5) * self.unit, r, 1, 1, self.unit/2, self.unit/2)
+end
+
+function Map:drawTileImage(quad, gx, gy, flipped, rotation)
+    Map.batch:add(quad, (gx + 0.5) * self.unit, (gy + 0.5) * self.unit, rotation, flipped and -1 or 1, 1, self.unit/2, self.unit/2)
     tilecount = tilecount + 1
 end
 
@@ -232,18 +192,22 @@ function Map:drawGrid()
     love.graphics.setColor(0,0,0)
     for x = x1, x2 do
         for y = y1, y2 do
-            local tileType = self:gridValue(x, y)
-            if not self:isWall(tileType) then
-                -- draw outlines
-                for ox = -1, 1 do
-                    for oy = -1, 1 do
-                        if (ox == 0) ~= (oy == 0) then
-                            local otherTileType = self:gridValue(x + ox, y + oy)
-                            if self:isWall(otherTileType) then
-                                if ox == 0 then
-                                    love.graphics.line(x * self.unit, (y + 0.5 + oy/2) * self.unit, (x+1) * self.unit, (y + 0.5 + oy/2) * self.unit)
-                                else
-                                    love.graphics.line((x + 0.5 + ox/2) * self.unit, y * self.unit, (x + 0.5 + ox/2) * self.unit, (y + 1) * self.unit)
+            if self:containsTile(x,y) then
+                local tileType = self:gridValue(x, y)
+                if not self:isWall(tileType) then
+                    -- draw outlines
+                    for ox = -1, 1 do
+                        for oy = -1, 1 do
+                            if (ox == 0) ~= (oy == 0) then
+                                if self:containsTile(x + ox, y + oy) then
+                                    local otherTileType = self:gridValue(x + ox, y + oy)
+                                    if self:isWall(otherTileType) then
+                                        if ox == 0 then
+                                            love.graphics.line(x * self.unit, (y + 0.5 + oy/2) * self.unit, (x+1) * self.unit, (y + 0.5 + oy/2) * self.unit)
+                                        else
+                                            love.graphics.line((x + 0.5 + ox/2) * self.unit, y * self.unit, (x + 0.5 + ox/2) * self.unit, (y + 1) * self.unit)
+                                        end
+                                    end
                                 end
                             end
                         end
@@ -252,41 +216,195 @@ function Map:drawGrid()
             end
         end
     end
-
-    --[[
-    love.graphics.setColor(64,64,64,128)
-    love.graphics.setLineWidth(1)
-    for x = self.x1, self.x2 + 1 do
-        love.graphics.line(x * self.unit, self.y1 * self.unit, x * self.unit, (self.y2 +1) * self.unit)
-    end
-    for y = self.y1, self.y2 + 1 do
-        love.graphics.line(self.x1 * self.unit, y * self.unit, (self.x2 + 1) * self.unit, y * self.unit)
-    end
-    ]]
 end
 
 
-Tile = {val=Map.BKG, debugVal=0, reachable=false, illuminated=false}
+-- tiles that have the same region value are connected.
+-- different values are not connected.
+Tile = {val=Map.BKG, debugVal=0, region=0, illuminated=false}
+Tile.__index = Tile
 function Map:newTile(value)
     local o = {val=value}
     setmetatable(o, Tile)
-    o.__index = Tile
     return o
+end
+
+
+
+
+-- REGION METHODS
+
+-- when the map is extended, check to see which new tiles are connected to existing regions
+-- and determine any new regions
+function Map:newTiles(x1, y1, x2, y2)
+    for x = x1, x2 do
+        for y = y1, y2 do
+            local t = self:gridValue(x, y)
+            if (not self:isWall(t)) and self.tiles[x][y].region == 0 then
+                self:floodFillRegion(x, y, self:newRegion())
+            end
+        end
+    end
 end
 
 function Map:setTile(p, value)
     local gx, gy = self:gridCoordinate(p)
     self:extendMap(gx, gy)
-    if (not self:isPlatform(value)) or gy >= self.surface[gx] then
+    -- don't let the user build platforms in midair
+    if gy >= self.surface[gx] or (not self:isPlatform(value)) then
+        local oldValue = self.tiles[gx][gy].val
         self.tiles[gx][gy].val = value
+        self:tileChanged(gx, gy, oldValue, value)
     end
     local tileP = P((gx+0.5) * self.unit, (gy+0.5) * self.unit)
     return tileP
 end
 
+function Map:tileChanged(gx, gy, oldValue, newValue)
+    -- update region information
+    if self:isWall(oldValue) ~= self:isWall(newValue) then
+        local adjacent = self:getAdjacent(gx, gy)
+        if self:isWall(newValue) then
+        -- if changed to wall, check for separation of areas
+            local unconnected = {}
+            local num_unconnected = #adjacent - 1
+            local oldRegion = self.tiles[gx][gy].region
+            self.tiles[gx][gy].region = 0
+            for i, tile in ipairs(adjacent) do
+                local x,y = tile[1], tile[2]
+                if i ~= 0 then
+                    unconnected[x] = unconnected[x] or {}
+                    unconnected[x][y] = true
+                end
+            end
+            for i, tile in ipairs(adjacent) do
+                local x,y = tile[1], tile[2]
+                if unconnected[x] and unconnected[x][y] and num_unconnected > 0 then
+                    -- do a flood fill for each adjacent tile
+                    -- and if it reaches another adjacent tile, mark it as connected
+                    -- if it reaches the last unconnected, then destroy the old region.
+                    -- otherwise, the last unconnected will continue to exist as the old region
+                    -- want a modified version of flood fill that stops if it contains an entire set of tiles and then  undoes its changes
+                    
+                    -- flood fill with 4 starting points, if any of them reaches each other, merge them and if only 1 starting point is unmerged, do an "undo" fill of the original type
+                end
+            end
+        else
+        -- if changed from wall to empty space, check for joining of previously distinct regions
+            local regions = {}
+            local numregions = 0
+            local largestRegion = nil
+            for _, tile in ipairs(adjacent) do
+                local x,y = tile[1], tile[2]
+                local region = self.tiles[x][y].region
+                if not regions[region] then
+                    regions[region] = true
+                    numregions = numregions + 1
+                    if (largestRegion == nil) or self.regionSizes[region] > self.regionSizes[largestRegion] then
+                        largestRegion = region
+                    end
+                end
+            end
+            if largestRegion then
+                local oldSize = self.regionSizes[largestRegion]
+                local t1 = love.timer.getTime()
+                self:floodFillRegion(gx, gy, largestRegion)
+                local t2 = love.timer.getTime()
+                local newSize = self.regionSizes[largestRegion]
+                floodTime2 = floodTime2 + t2 - t1
+                mergedTiles = mergedTiles + newSize - oldSize
+            else
+                self.tiles[gx][gy].region = self:newRegion()
+            end
+        end
+    end
+end
+
+-- fill a region with a specified type. if the fill encounters another larger region it will fill with the other region instead
+function Map:floodFillRegion(gx, gy, value)
+    self.tiles[gx][gy].region = value
+    local count = 1
+    local queue = {{gx, gy}}
+    while #queue > 0 do
+        local tx, ty = queue[1][1], queue[1][2]
+        table.remove(queue,1)
+        local t_adjacent = self:getAdjacent(tx, ty)
+        for _, other_tile in ipairs(t_adjacent) do
+            local otherx, othery = other_tile[1], other_tile[2]
+            local oregion = self.tiles[otherx][othery].region
+            if oregion ~= value then
+                count = count + 1
+                if oregion ~= 0 and self:isRegion(oregion) then
+                    if self.regionSizes[oregion] > self.regionSizes[value] + count then
+                        queue = {other_tile}
+                        value = oregion
+                        break
+                    else
+                        self:destroyRegion(oregion)
+                    end
+                end
+                self.tiles[otherx][othery].region = value
+                table.insert(queue, other_tile)
+            end
+        end
+    end
+    self.regionSizes[value] = self.regionSizes[value] + count
+end
+
+function Map:destroyRegion(region)
+    self.regionSizes[region] = -1
+    self.numRegions = self.numRegions - 1
+end
+
+-- the size of this region should be increased after the region is created since size 0 means that it no longer exists
+function Map:newRegion()
+    self.numRegions = self.numRegions + 1
+    -- check for reuse of an existing region
+    for i, size in ipairs(self.regionSizes) do
+        if size < 0 then
+            return i
+        end
+    end
+    -- or add a new region. the 1st region should be "1"
+    self.regionSizes[self.numRegions] = 0
+    return self.numRegions
+end
+
+function Map:isRegion(region)
+    return region ~= 0 and self.regionSizes[region] >= 0
+end
+
+-- get non-wall tiles adjacent to the current tile
+function Map:getAdjacent(gx, gy)
+    local adjacent = {}
+    for ox = -1, 1 do
+        for oy = -1, 1 do
+            if ox ~= oy and (ox == 0 or oy == 0) then
+                local x,y = gx + ox, gy + oy
+                if self:containsTile(x,y) then
+                    local tileType = self:gridValue(x, y)
+                    if not self:isWall(tileType) then
+                        table.insert(adjacent, {x,y})
+                    end
+                end
+            end
+        end
+    end
+    return adjacent
+end
+
+-- END REGION METHODS
+
+function Map:containsTile(gx, gy)
+    return self.tiles[gx] and self.tiles[gx][gy]
+end
+
+function Map:tileDrawable(gx, gy)
+    return self.containsTile(gx, gy) and self.tiles[gx][gy].img
+end
+
 function Map:setTileValue(gx, gy, value)
-    if gx < self.x1 or gx > self.x2 or gy < self.y1 or gy > self.y2 then
-        print("New tile at " .. gx .. ", " .. gy)
+    if not self:containsTile(gx, gy) then
         self:setTile(P((gx + 0.5) * self.unit, (gy + 0.5) * self.unit))
     end
     self.tiles[gx][gy].debugVal = value
@@ -294,6 +412,10 @@ end
 
 function Map:gridCoordinate(p)
     return math.floor(p[1]/self.unit), math.floor(p[2]/self.unit)
+end
+
+function Map:gameCoordinate(gx, gy)
+    return P((gx + 0.5) * self.unit, (gy + 0.5) * self.unit)
 end
 
 function Map:getTile(p)
@@ -318,16 +440,24 @@ function Map:getTilesNear(p, r)
 end
 
 function Map:gridValue(gx, gy)
-    if gx < self.x1 or gx > self.x2 or gy < self.y1 or gy > self.y2 then
+    if not self:containsTile(gx,gy) then
         self:extendMap(gx, gy)
     end
-    tile = self.tiles[gx][gy]
+    local tile = self.tiles[gx][gy]
     return tile.val
+end
+
+function Map:getTileObject(gx, gy)
+    if not self:containsTile(gx,gy) then
+        self:extendMap(gx, gy)
+    end
+    return self.tiles[gx][gy]
 end
 
 -- this shape of tiles was just added, cluster similar values together (including similar to the adjacent area)
 -- do not affect values above the surface
 function Map:smoothValues(gx1, gy1, gx2, gy2)
+    local t1 = love.timer.getTime()
     for iteration = 1,1 do
         local newMap = {}
         for x = gx1, gx2 do
@@ -348,15 +478,13 @@ function Map:smoothValues(gx1, gy1, gx2, gy2)
                         for oy = -o, o do
                             local nx = x + ox
                             local ny = y + oy
-                            --if ox ~= 0 or oy ~= 0 then
-                                if nx >= self.x1 and nx <= self.x2 and ny >= self.y1 and ny <= self.y2 and ny > self.surface[nx] then
-                                    local nType = self.tiles[nx][ny].val
-                                    if nCounts[nType] ~= nil then
-                                        nCounts[nType] = nCounts[nType] + 1
-                                        nCount = nCount + 1
-                                    end
+                            if self:containsTile(nx, ny) and ny > self.surface[nx] then
+                                local nType = self.tiles[nx][ny].val
+                                if nCounts[nType] ~= nil then
+                                    nCounts[nType] = nCounts[nType] + 1
+                                    nCount = nCount + 1
                                 end
-                            --end
+                            end
                         end
                     end
                     -- want to see how the neighbor type distribution compares to the statistical frequency
@@ -406,13 +534,59 @@ function Map:smoothValues(gx1, gy1, gx2, gy2)
             
         end
     end
+    local t2 = love.timer.getTime()
+    -- update region info
+    self:newTiles(gx1, gy1, gx2, gy2)
+    local t3 = love.timer.getTime()
+    smoothTime = smoothTime + t2 - t1
+    floodTime = floodTime + t3 - t2
+    newTiles = newTiles + (gx2 - gx1 + 1) * (gy2 - gy1 + 1)
 end
 
 -- make the map larger to contain a specified point
 function Map:extendMap(gx, gy)
     local surfaceVariance = 0.3
-    local blocksize = 16
     math.randomseed(love.timer.getTime())
+    -- new version
+    if self.x1 == self.x2 then
+        -- map initialization, x1, y1, ... = 0
+        -- need to maintain that blocks are positioned mod blocksize
+        self.tiles[0] = {}
+        self.x2 = self.blocksize - 1
+        self.y2 = self.blocksize - 1
+        for x = 1, self.blocksize - 1 do
+            self.tiles[x] = {}
+            self.surface[x] = math.floor(0.5 + self.surface[x - 1] + (math.random() - 0.5) * (1.0 + surfaceVariance))
+        end
+    end
+    while gx < self.x1 do
+        for n = 1, self.blocksize do
+            self.x1 = self.x1 - 1
+            self.tiles[self.x1] = {}
+            self.surface[self.x1] = math.floor(0.5 + self.surface[self.x1 + 1] + (math.random() - 0.5) * (1.0 + surfaceVariance))
+        end
+    end
+    while gx > self.x2 do
+        for n = 1, self.blocksize do
+            self.x2 = self.x2 + 1
+            self.tiles[self.x2] = {}
+            self.surface[self.x2] = math.floor(0.5 + self.surface[self.x2 - 1] + (math.random() - 0.5) * (1.0 + surfaceVariance))
+        end
+    end
+    if not self.tiles[gx][gy] then
+        -- generate the block that contains this tile
+        local bx1, by1 = self.blocksize * math.floor(gx/self.blocksize), self.blocksize * math.floor(gy/self.blocksize)
+        local bx2, by2 = bx1 + self.blocksize - 1, by1 + self.blocksize - 1
+        for x = bx1, bx2 do
+            for y = by1, by2 do
+                self.tiles[x][y] = self:newTile(self:randomTile(x, y))
+            end
+        end
+        self:smoothValues(bx1, by1, bx2, by2)
+        self.y1 =  math.min(self.y1, by1)
+        self.y2 =  math.max(self.y2, by2)
+    end
+    --[[
     while gx < self.x1 do
         for n = 1,blocksize do
             self.x1 = self.x1 - 1
@@ -453,6 +627,7 @@ function Map:extendMap(gx, gy)
         end
         self:smoothValues(self.x1, self.y2 - blocksize + 1, self.x2, self.y2)
     end
+    ]]
 end
 
 -- returns new position and speed

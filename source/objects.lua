@@ -50,7 +50,7 @@ function playRandomSound(soundList)
     love.audio.play(soundList[math.random(1, #soundList)])
 end
 
-
+volume = 1
 
 
 function InitObjects()
@@ -134,7 +134,7 @@ function Target:update(dt)
     if self.worker then
         if not map:isWall(map:getTile(self.p)) then
             local dd = Vdd(Vsub(self.worker:center(), self.p))
-            if (dd < self.worker.size[2] ^ 2) then
+            if (dd < self.worker.digRange ^ 2) then
                 self.destroyed = true
                 if self.worker then
                     self.worker.target = nil
@@ -269,7 +269,7 @@ end
 
 
 --Unit
-Unit = Object:new{size={14,32}, col={140,160,240},drag=1, line={10,30,10}, capacity=30, facingRight=true, weaponAngle = -math.pi/4}
+Unit = Object:new{t=Type.new(), size={14,32}, col={140,160,240},drag=1, line={10,30,10}, capacity=30, facingRight=true, weaponAngle = -math.pi/4, placeRange = 32, digRange = 32, pickupRange = 32}
 function Unit:add(o, layer)
     o = o or {}
     o.actions = ActionMap:new(o)
@@ -323,7 +323,7 @@ function Unit:update(dt)
                 if mat.owner == nil then
                     local matDiff = Vsub(mat:center(), self:center())
                     local dd = Vdd(matDiff)
-                    if dd < self.size[2] ^ 2 then
+                    if dd < self.pickupRange ^ 2 then
                         self:collect(mat)
                     elseif dd < maxD then
                         maxD = dd
@@ -331,9 +331,9 @@ function Unit:update(dt)
                     end
                 end
             end
-        else
+        else -- drop off
             diff = Vsub(P(0,0), self:center())
-            if Vdd(diff) < self.size[2] then
+            if Vdd(diff) < self.pickupRange then
                 for _, mat in ipairs(self.materials) do
                     collect(mat.resource, 1)
                     mat.destroyed = true
@@ -356,7 +356,7 @@ function Unit:update(dt)
                         self.actions:use(Action.JUMP)
                     else
                         if self.waitForExplosion == nil then
-                            self.waitForExplosion = self.actions:use(Action.THROW, diff, 0)
+                            self.waitForExplosion = self.actions:use(Action.THROW, diff, 10)
                         end
                     end
                 else
@@ -512,7 +512,7 @@ end
 
 
 -- little resource blocks
-Material = Object:new{size={8,8}, resource=0, elastic = 0.4, drag = 1, line = {10,10,10}}
+Material = Object:new{t=Type.new(), size={8,8}, resource=0, elastic = 0.4, drag = 1, line = {10,10,10}}
 function Material:add(o, layer)
     local o = Object.add(self, o, layer)
     -- the center of the material should be at it's initial pos
@@ -535,7 +535,7 @@ end
 
 
 -- Explosive
-Explosive = Object:new{radius=48, timer=1.2, size={12,12}, col={160,0,0}, elastic = 0.3, drag=1, line={30,0,0}}
+Explosive = Object:new{t=Type.new(), radius=48, timer=1.2, size={12,12}, col={160,0,0}, elastic = 0.3, drag=1, line={30,0,0}}
 function Explosive:update(dt)
     self.timer = self.timer - dt
     if self.timer <= 0 then
